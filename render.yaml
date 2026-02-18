@@ -1,0 +1,19 @@
+services:
+  # Backend - FastAPI on Render Free Tier
+  - type: web
+    name: mindmate-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    rootDir: backend
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.1-8b-instant
+      - key: BACKEND_CORS_ORIGINS
+        value: https://mindmate.vercel.app,https://mind-mate-dusky.vercel.app,https://mind-mate-murex.vercel.app
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    healthCheckPath: /health

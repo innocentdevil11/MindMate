@@ -1,15 +1,5 @@
 'use client'
 
-/**
- * Login Page — MindMate.
- * 
- * Tabbed login/signup form matching the existing glassmorphism design.
- * Redirects to / on success. Shows inline errors.
- * 
- * WHY minimal: Auth pages should not distract.
- * The user wants to get to the decision tool — not admire the login screen.
- */
-
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
@@ -36,8 +26,7 @@ export default function LoginPage() {
       if (isSignUp) {
         const { error: signUpError } = await signUp(email, password)
         if (signUpError) throw signUpError
-        // Supabase may auto-sign-in after signup (email confirmation disabled)
-        setSuccess('Account created! Redirecting...')
+        setSuccess('Account created. Redirecting...')
         setTimeout(() => router.push('/'), 500)
       } else {
         const { error: signInError } = await signIn(email, password)
@@ -52,55 +41,50 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen gradient-bg flex items-center justify-center px-4">
+    <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center px-4 sm:px-6">
       <motion.div
-        initial={{ opacity: 0, y: 30, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         className="w-full max-w-md"
       >
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-5xl font-black bg-gradient-to-r from-cyan-400 via-violet-500 to-emerald-400 bg-clip-text text-transparent mb-3">
-            ✨ MindMate
-          </h1>
-          <p className="text-gray-400 text-sm">
-            Sign in to access your personal AI council
-          </p>
+        <div className="text-center mb-7">
+          <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">MindMate</p>
+          <h1 className="text-2xl font-medium text-slate-700 mt-2 tracking-tight">Continue your thinking session</h1>
+          <p className="text-slate-500 text-sm mt-2">Sign in to return to your workspace.</p>
         </div>
 
-        {/* Auth Card */}
-        <div className="glass rounded-2xl p-8 border border-gray-700/50">
-          {/* Tab Switcher */}
-          <div className="flex mb-6 bg-black/30 rounded-xl p-1">
+        <div className="rounded-[1.75rem] bg-white/90 border border-slate-200/80 shadow-[0_12px_36px_rgba(15,23,42,0.08)] p-6 sm:p-7">
+          <div className="flex mb-6 bg-slate-100/80 rounded-2xl p-1">
             <button
-              onClick={() => { setIsSignUp(false); setError(null); setSuccess(null) }}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
-                !isSignUp
-                  ? 'bg-violet-500/30 text-violet-300 border border-violet-500/30'
-                  : 'text-gray-400 hover:text-gray-300'
+              onClick={() => {
+                setIsSignUp(false)
+                setError(null)
+                setSuccess(null)
+              }}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                !isSignUp ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               Sign In
             </button>
             <button
-              onClick={() => { setIsSignUp(true); setError(null); setSuccess(null) }}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
-                isSignUp
-                  ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/30'
-                  : 'text-gray-400 hover:text-gray-300'
+              onClick={() => {
+                setIsSignUp(true)
+                setError(null)
+                setSuccess(null)
+              }}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                isSignUp ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               Sign Up
             </button>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">
-                Email
-              </label>
+              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-[0.16em]">Email</label>
               <input
                 type="email"
                 value={email}
@@ -108,14 +92,12 @@ export default function LoginPage() {
                 required
                 disabled={loading}
                 placeholder="you@example.com"
-                className="w-full bg-black/40 border border-gray-700/50 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all duration-200 disabled:opacity-50 text-sm"
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300 focus:border-slate-300 transition-colors disabled:opacity-50 text-sm"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">
-                Password
-              </label>
+              <label className="block text-[11px] font-semibold text-slate-400 mb-1.5 uppercase tracking-[0.16em]">Password</label>
               <input
                 type="password"
                 value={password}
@@ -123,40 +105,30 @@ export default function LoginPage() {
                 required
                 disabled={loading}
                 minLength={6}
-                placeholder="••••••••"
-                className="w-full bg-black/40 border border-gray-700/50 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all duration-200 disabled:opacity-50 text-sm"
+                placeholder="At least 6 characters"
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300 focus:border-slate-300 transition-colors disabled:opacity-50 text-sm"
               />
             </div>
 
-            {/* Error */}
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2.5 text-red-400 text-xs">
-                {error}
-              </div>
-            )}
+            {error && <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-2.5 text-red-500 text-xs">{error}</div>}
 
-            {/* Success */}
             {success && (
-              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-4 py-2.5 text-emerald-400 text-xs">
+              <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5 text-emerald-600 text-xs">
                 {success}
               </div>
             )}
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-cyan-500 via-violet-500 to-emerald-500 rounded-xl font-bold text-white text-sm shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:shadow-xl hover:shadow-violet-500/20"
+              className="w-full py-3 bg-slate-700 rounded-xl font-semibold text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors hover:bg-slate-800"
             >
               {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
             </button>
           </form>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-gray-500 text-xs mt-4">
-          Free tier • No credit card required
-        </p>
+        <p className="text-center text-slate-400 text-xs mt-4">The same workspace starts here.</p>
       </motion.div>
     </div>
   )

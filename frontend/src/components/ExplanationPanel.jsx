@@ -1,34 +1,27 @@
 'use client'
 
 /**
- * ExplanationPanel — MindMate (DEV-ONLY).
- * 
- * Collapsible panel showing backend explanation metadata.
- * Only visible when NEXT_PUBLIC_DEV_MODE=true.
- * 
- * WHY dev-only: End users don't need to see confidence scores
- * or memory labels. This is for debugging and trust building
- * during development.
+ * ExplanationPanel — MindMate (Calm Redesign, DEV-ONLY)
  */
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { ChevronRight, ChevronDown } from 'lucide-react'
 
 const IS_DEV = process.env.NEXT_PUBLIC_DEV_MODE === 'true'
 
 export default function ExplanationPanel({ explanation }) {
   const [isOpen, setIsOpen] = useState(false)
 
-  // Only render in dev mode and if explanation data exists
   if (!IS_DEV || !explanation) return null
 
   return (
-    <div className="mt-4">
+    <div className="mt-4 border-t border-slate-100 pt-3">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="text-xs text-gray-500 hover:text-gray-400 font-mono flex items-center gap-1 transition-colors"
+        className="text-xs text-slate-400 hover:text-slate-600 font-mono flex items-center gap-1 transition-colors"
       >
-        <span>{isOpen ? '▼' : '▶'}</span>
+        {isOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         <span>Debug: Explanation Metadata</span>
       </button>
 
@@ -41,35 +34,35 @@ export default function ExplanationPanel({ explanation }) {
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="mt-2 bg-black/40 border border-gray-700/30 rounded-lg p-3 font-mono text-xs text-gray-400 space-y-1">
-              <div>
-                <span className="text-gray-500">tone_mode:</span>{' '}
-                <span className="text-cyan-400">{explanation.tone_mode}</span>
+            <div className="mt-2 bg-slate-50 border border-slate-100 rounded-lg p-3 font-mono text-[11px] text-slate-500 space-y-1.5 shadow-inner">
+              <div className="flex justify-between">
+                <span className="text-slate-400">tone_mode:</span>
+                <span className="text-indigo-500 font-semibold">{explanation.tone_mode}</span>
               </div>
-              <div>
-                <span className="text-gray-500">memory_labels:</span>{' '}
-                <span className="text-violet-400">
+              <div className="flex justify-between">
+                <span className="text-slate-400">memory_labels:</span>
+                <span className="text-violet-500 font-semibold text-right max-w-[150px] truncate">
                   {explanation.memory_labels_used?.length
                     ? explanation.memory_labels_used.join(', ')
                     : 'none'}
                 </span>
               </div>
-              <div>
-                <span className="text-gray-500">has_memory:</span>{' '}
-                <span className={explanation.has_memory_context ? 'text-emerald-400' : 'text-gray-500'}>
+              <div className="flex justify-between">
+                <span className="text-slate-400">has_memory:</span>
+                <span className={explanation.has_memory_context ? 'text-emerald-500 font-semibold' : 'text-slate-400'}>
                   {String(explanation.has_memory_context)}
                 </span>
               </div>
-              <div>
-                <span className="text-gray-500">confidence:</span>{' '}
-                <span className={explanation.response_confidence >= 0.8 ? 'text-emerald-400' : 'text-orange-400'}>
+              <div className="flex justify-between">
+                <span className="text-slate-400">confidence:</span>
+                <span className={explanation.response_confidence >= 0.8 ? 'text-emerald-500 font-semibold' : 'text-orange-500 font-semibold'}>
                   {(explanation.response_confidence * 100).toFixed(0)}%
                 </span>
               </div>
               {explanation.preference_confidence !== undefined && (
-                <div>
-                  <span className="text-gray-500">pref_confidence:</span>{' '}
-                  <span className="text-gray-400">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">pref_confidence:</span>
+                  <span className="text-slate-600 font-semibold">
                     {(explanation.preference_confidence * 100).toFixed(0)}%
                   </span>
                 </div>

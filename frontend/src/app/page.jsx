@@ -1,63 +1,43 @@
 'use client'
 
-/**
- * Main Page — MindMate.
- * 
- * MODIFIED from original:
- * - Added auth gate (redirect to /login if not authenticated)
- * - Replaced bare fetch() with api.post() (auto-attaches JWT token)
- * - Added user header bar with sign-out + preferences
- * - Added FeedbackPanel below decision result
- * - Added ExplanationPanel (dev-only) for debugging
- * - Added tone badge showing current preference
- * 
- * PRESERVED from original:
- * - All existing UI layout, animations, and component usage
- * - AgentCard, WeightSlider, LoadingSpinner, MarkdownRenderer
- * - Audio recording flow
- * - Weight controls
- * - Error display
- */
-
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Settings, Send, Mic, X } from 'lucide-react'
 import WeightSlider from '@/components/WeightSlider'
 import AgentCard from '@/components/AgentCard'
-import LoadingSpinner from '@/components/LoadingSpinner'
-import MarkdownRenderer from '@/components/MarkdownRenderer.jsx'
-import AudioRecorder from '@/components/AudioRecorder'
-// NEW: Auth, API, and feature components
+import MarkdownRenderer from '@/components/MarkdownRenderer'
+import Blob from '@/components/Blob'
 import { useAuth } from '@/context/AuthContext'
 import { api } from '@/lib/api'
 import FeedbackPanel from '@/components/FeedbackPanel'
 import ExplanationPanel from '@/components/ExplanationPanel'
 
 const agentConfig = [
-  { key: 'ethical', label: 'Ethical', descriptor: 'Moral & philosophical perspective', color: 'violet' },
-  { key: 'risk', label: 'Risk & Logic', descriptor: 'Analytical risk assessment', color: 'orange' },
+  { key: 'ethical', label: 'Ethical', descriptor: 'Moral and philosophical perspective', color: 'violet' },
+  { key: 'risk', label: 'Risk and Logic', descriptor: 'Analytical risk assessment', color: 'orange' },
   { key: 'eq', label: 'EQ', descriptor: 'Emotional intelligence lens', color: 'pink' },
   { key: 'values', label: 'Value Alignment', descriptor: 'Personal values harmony', color: 'emerald' },
-  { key: 'red_team', label: 'Red Team', descriptor: 'Devil\'s advocate perspective', color: 'cyan' },
+  { key: 'red_team', label: 'Red Team', descriptor: 'Devils advocate perspective', color: 'cyan' },
 ]
 
-// Tone options with descriptions for the inline selector
 const TONE_OPTIONS = [
-  { value: 'clean', label: 'Clean', desc: 'Professional and respectful', icon: '✨' },
-  { value: 'casual', label: 'Casual', desc: 'Relaxed, like talking to a friend', icon: '💬' },
-  { value: 'blunt', label: 'Blunt', desc: 'Direct, no sugar-coating', icon: '🎯' },
-  { value: 'blunt_profane', label: 'Unfiltered', desc: 'Raw and explicit (opt-in)', icon: '🔥', warning: true },
+  { value: 'clean', label: 'Clean' },
+  { value: 'casual', label: 'Casual' },
+  { value: 'blunt', label: 'Blunt' },
+  { value: 'blunt_profane', label: 'Unfiltered' },
 ]
 
 const TONE_LABELS = {
-  clean: '✨ Clean',
-  casual: '💬 Casual',
-  blunt: '🎯 Blunt',
-  blunt_profane: '🔥 Unfiltered',
+  clean: 'Clean',
+  casual: 'Casual',
+  blunt: 'Blunt',
+  blunt_profane: 'Unfiltered',
 }
 
 export default function Home() {
   const [query, setQuery] = useState('')
+  const [messages, setMessages] = useState([])
   const [weights, setWeights] = useState({
     ethical: 0.2,
     risk: 0.2,
@@ -66,48 +46,145 @@ export default function Home() {
     red_team: 0.2,
   })
 
+  const [isVoiceMode, setIsVoiceMode] = useState(false)
+  const [isVoiceListening, setIsVoiceListening] = useState(false)
+  const [voiceDraft, setVoiceDraft] = useState('')
+  const [voiceInterim, setVoiceInterim] = useState('')
+
+  const [showSettings, setShowSettings] = useState(false)
+  const [expandedInsights, setExpandedInsights] = useState({})
+  const [isInputFocused, setIsInputFocused] = useState(false)
+
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
 
-  // NEW: Auth state
   const { user, loading: authLoading, signOut } = useAuth()
   const router = useRouter()
+  const messagesEndRef = useRef(null)
+  const queryInputRef = useRef(null)
 
-  // Tone preference state
   const [currentTone, setCurrentTone] = useState('clean')
   const [toneSaving, setToneSaving] = useState(false)
-  const [showProfanityWarning, setShowProfanityWarning] = useState(false)
 
-  // NEW: Auth gate — redirect to login if not authenticated
+  const [isVoiceSupported] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition)
+  })
+  const voiceRecognitionRef = useRef(null)
+
+  const hasMessages = messages.length > 0
+  const isComposing = isInputFocused || query.length > 0
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login')
     }
   }, [user, authLoading, router])
 
-  // NEW: Fetch current tone preference on mount
   useEffect(() => {
     if (!user) return
-    api.get('/preferences')
-      .then(data => setCurrentTone(data.tone_preference || 'clean'))
-      .catch(() => { }) // Silently fail — defaults apply
+    api
+      .get('/preferences')
+      .then((data) => setCurrentTone(data.tone_preference || 'clean'))
+      .catch(() => {})
   }, [user])
 
-  // MODIFIED: Use api.post() instead of bare fetch for auth token attachment
-  const handleSubmit = async () => {
-    if (!query.trim()) return
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
+  useEffect(() => {
+    const textarea = queryInputRef.current
+    if (!textarea) return
+
+    textarea.style.height = '0px'
+    const maxHeight = 160
+    const nextHeight = Math.min(textarea.scrollHeight, maxHeight)
+    textarea.style.height = `${nextHeight}px`
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  }, [query])
+
+  useEffect(() => {
+    if (!isVoiceSupported) return
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    const recognition = new SpeechRecognition()
+    recognition.continuous = false
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+
+    recognition.onresult = (event) => {
+      let finalText = ''
+      let interim = ''
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          finalText += transcript
+        } else {
+          interim += transcript
+        }
+      }
+
+      setVoiceInterim(interim)
+
+      if (finalText.trim()) {
+        setVoiceDraft((prev) => (prev ? `${prev} ${finalText.trim()}` : finalText.trim()))
+      }
+    }
+
+    recognition.onend = () => {
+      setIsVoiceListening(false)
+      setVoiceInterim('')
+    }
+
+    recognition.onerror = () => {
+      setIsVoiceListening(false)
+      setVoiceInterim('')
+    }
+
+    voiceRecognitionRef.current = recognition
+
+    return () => {
+      recognition.abort()
+    }
+  }, [isVoiceSupported])
+
+  const startVoiceCapture = () => {
+    if (!voiceRecognitionRef.current || loading || isVoiceListening) return
+    try {
+      setVoiceInterim('')
+      voiceRecognitionRef.current.start()
+      setIsVoiceListening(true)
+    } catch {
+      setIsVoiceListening(false)
+    }
+  }
+
+  const stopVoiceCapture = () => {
+    if (!voiceRecognitionRef.current || !isVoiceListening) return
+    try {
+      voiceRecognitionRef.current.stop()
+    } catch {
+      setIsVoiceListening(false)
+    }
+  }
+
+  const submitDecision = async (rawText) => {
+    const text = rawText.trim()
+    if (!text) return
+
+    const userMessage = { id: Date.now(), role: 'user', content: text }
+    setMessages((prev) => [...prev, userMessage])
     setLoading(true)
     setError(null)
-    setResult(null)
 
     try {
       const data = await api.post('/decision', {
-        query: query.trim(),
+        query: text,
         weights,
       })
-      setResult(data)
+      setMessages((prev) => [...prev, { id: Date.now() + 1, role: 'assistant', data, query: text }])
     } catch (err) {
       setError(err.message)
     } finally {
@@ -115,493 +192,401 @@ export default function Home() {
     }
   }
 
-  const updateWeight = (key, value) => {
-    setWeights(prev => ({ ...prev, [key]: value }))
+  const handleSubmit = async (e) => {
+    if (e) e.preventDefault()
+    const currentQuery = query.trim()
+    if (!currentQuery) return
+    setQuery('')
+    await submitDecision(currentQuery)
   }
 
-  const handleTranscription = (transcribedText) => {
-    setQuery(prev => prev ? prev + ' ' + transcribedText : transcribedText)
+  const handleVoiceSubmit = async () => {
+    const spokenText = voiceDraft.trim()
+    if (!spokenText || loading) return
+
+    stopVoiceCapture()
+    setIsVoiceMode(false)
+    setVoiceInterim('')
+    setVoiceDraft('')
+    await submitDecision(spokenText)
   }
 
-  // Handle tone selection — save to backend
-  const handleToneSelect = async (newTone) => {
-    if (newTone === 'blunt_profane' && currentTone !== 'blunt_profane') {
-      setShowProfanityWarning(true)
-      return
+  const handleQueryKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit()
     }
-    await saveTone(newTone)
+  }
+
+  const updateWeight = (key, value) => {
+    setWeights((prev) => ({ ...prev, [key]: value }))
   }
 
   const saveTone = async (newTone) => {
+    const previousTone = currentTone
+    setCurrentTone(newTone)
     setToneSaving(true)
     try {
       await api.put('/preferences', {
         tone_preference: newTone,
         confirm_contradiction: true,
       })
-      setCurrentTone(newTone)
-      setShowProfanityWarning(false)
     } catch (err) {
       console.warn('Failed to save tone:', err.message)
+      setCurrentTone(previousTone)
     } finally {
       setToneSaving(false)
     }
   }
 
-  // Show nothing while checking auth state
+  const handleToneSelect = async (newTone) => {
+    if (newTone === currentTone) return
+    await saveTone(newTone)
+  }
+
+  const toggleInsights = (msgId) => {
+    setExpandedInsights((prev) => ({
+      ...prev,
+      [msgId]: !prev[msgId],
+    }))
+  }
+
+  const getMessageOpacity = (index) => {
+    const age = messages.length - index - 1
+    if (age >= 4) return 0.58
+    if (age === 3) return 0.7
+    if (age === 2) return 0.82
+    if (age === 1) return 0.92
+    return 1
+  }
+
   if (authLoading || !user) {
     return (
-      <div className="min-h-screen gradient-bg flex items-center justify-center">
-        <div className="text-gray-400 text-sm">Loading...</div>
+      <div className="min-h-screen bg-[#F6F6F8] flex items-center justify-center">
+        <div className="text-slate-400 text-sm">Loading...</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen gradient-bg">
-      {/* User Header Bar — minimal: user info + sign out only */}
-      <div className="sticky top-0 z-40 backdrop-blur-md bg-black/20 border-b border-gray-800/30">
-        <div className="container mx-auto px-4 max-w-6xl flex items-center justify-between py-3">
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-400">
-              {user.email}
-            </span>
-            {/* Tone badge */}
-            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-violet-500/15 text-violet-300 border border-violet-500/20">
-              {TONE_LABELS[currentTone] || currentTone}
-            </span>
-          </div>
-          <button
-            onClick={signOut}
-            className="px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
-          >
-            Sign Out
-          </button>
-        </div>
-      </div>
-
-      <div className="container mx-auto px-4 py-12 max-w-6xl">
-
-        {/* Header — PRESERVED from original */}
-        <motion.div
-          initial={{ opacity: 0, y: -40, scale: 0.85 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-          className="text-center mb-20 relative"
-        >
-          {/* Decorative glow effect */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[200px] bg-gradient-to-r from-cyan-500/10 via-violet-500/10 to-emerald-500/10 blur-3xl -z-10" />
-
+    <div className="min-h-screen flex justify-center bg-[radial-gradient(ellipse_at_top_left,_#e9e4f6_0%,_transparent_55%),radial-gradient(ellipse_at_top_right,_#e8f4ef_0%,_transparent_45%),radial-gradient(ellipse_at_bottom,_#f3e8f5_0%,_#f8f8fa_58%)]">
+      <AnimatePresence>
+        {isVoiceMode && (
           <motion.div
-            animate={{
-              textShadow: [
-                '0 0 30px rgba(6, 255, 240, 0.4)',
-                '0 0 50px rgba(168, 85, 247, 0.5)',
-                '0 0 30px rgba(16, 185, 129, 0.4)',
-                '0 0 30px rgba(6, 255, 240, 0.4)'
-              ]
-            }}
-            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <h1 className="text-8xl font-black mb-6 bg-gradient-to-r from-cyan-400 via-violet-500 to-emerald-400 bg-clip-text text-transparent leading-tight tracking-tight">
-              <motion.span
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="inline-block"
-              >
-                ✨
-              </motion.span>
-              {' '}
-              <motion.span
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="inline-block"
-              >
-                Mind
-              </motion.span>
-              <motion.span
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-                className="inline-block"
-              >
-                Mate
-              </motion.span>
-            </h1>
-          </motion.div>
-          <motion.p
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            className="text-gray-300 text-xl font-light tracking-wide mb-2"
-          >
-            A private board of <span className="text-cyan-400 font-bold">AI directors</span> helping you think clearly
-          </motion.p>
-
-          <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.8 }}
-            className="text-gray-500 text-sm font-medium"
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-[#F7F6F7]/95 backdrop-blur-sm flex items-center justify-center px-4"
           >
-            Make better decisions with multi-perspective AI analysis
-          </motion.p>
+            <div className="w-full max-w-md rounded-[2.2rem] bg-white/92 border border-white/80 shadow-[0_20px_50px_rgba(15,23,42,0.10)] p-7 sm:p-8">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Voice Mode</p>
+                  <h2 className="text-2xl font-medium text-slate-700 mt-2">Talk through your thought</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsVoiceMode(false)
+                    stopVoiceCapture()
+                  }}
+                  className="p-2 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                  aria-label="Close voice mode"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-          <motion.div
-            initial={{ opacity: 0, scale: 0 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 1, type: 'spring', stiffness: 200, damping: 15 }}
-            className="mt-8 inline-flex items-center gap-2 px-6 py-3 glass rounded-full text-sm text-gray-300 border border-emerald-500/30 neon-glow-emerald"
-          >
-            <motion.span
-              animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-              className="inline-block w-2 h-2 bg-emerald-400 rounded-full shadow-lg shadow-emerald-500/50"
-            />
-            <span className="font-semibold">Multi-Agent Decision Intelligence</span>
-          </motion.div>
-        </motion.div>
+              <div className="my-7 flex justify-center">
+                <Blob isListening={isVoiceListening} tone={currentTone} size="lg" />
+              </div>
 
-        {/* Query Input — PRESERVED from original */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          className="mb-12"
-        >
-          <div className="glass rounded-3xl p-10 border-2 border-violet-500/30 relative overflow-hidden group hover:border-violet-500/50 transition-all duration-500">
-            {/* Animated background glow */}
-            <motion.div
-              className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-cyan-500/5"
-              animate={{
-                opacity: [0.3, 0.5, 0.3],
-              }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-            />
+              <p className="text-sm text-slate-500 text-center">
+                {!isVoiceSupported
+                  ? 'Voice input is unavailable in this browser.'
+                  : isVoiceListening
+                    ? 'Listening... release to stop'
+                    : 'Push and hold to talk'}
+              </p>
 
-            {/* Decorative corner accents */}
-            <motion.div
-              className="absolute top-0 left-0 w-32 h-32 bg-gradient-to-br from-violet-500/20 to-transparent rounded-br-full blur-2xl"
-              animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
-              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-            />
-            <motion.div
-              className="absolute bottom-0 right-0 w-32 h-32 bg-gradient-to-tl from-cyan-500/20 to-transparent rounded-tl-full blur-2xl"
-              animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
-              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 2.5 }}
-            />
+              <div className="mt-4 flex justify-center">
+                <button
+                  type="button"
+                  onMouseDown={startVoiceCapture}
+                  onMouseUp={stopVoiceCapture}
+                  onMouseLeave={stopVoiceCapture}
+                  onTouchStart={startVoiceCapture}
+                  onTouchEnd={stopVoiceCapture}
+                  onTouchCancel={stopVoiceCapture}
+                  disabled={!isVoiceSupported || loading}
+                  className={`w-16 h-16 rounded-full flex items-center justify-center border transition-colors ${
+                    isVoiceListening
+                      ? 'bg-emerald-100 border-emerald-200 text-emerald-700'
+                      : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
+                  } disabled:opacity-50`}
+                  aria-label="Hold to talk"
+                >
+                  <Mic className="w-6 h-6" />
+                </button>
+              </div>
 
-            <label className="relative z-10 block text-base font-bold text-gray-100 mb-5 tracking-wide uppercase flex items-center gap-3 group-hover:text-cyan-300 transition-colors duration-300">
-              <span className="text-2xl">💭</span>
-              <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">Your Dilemma</span>
-            </label>
-            {/* Textarea + inline mic button */}
-            <div className="relative z-10">
-              <textarea
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                disabled={loading}
-                placeholder="Should I leave my current job to start a startup? What factors should I consider?"
-                className="w-full h-48 bg-black/40 border-2 border-gray-700/50 rounded-2xl px-6 py-5 pr-16 text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 focus:bg-black/50 resize-none transition-all duration-300 disabled:opacity-50 font-light text-lg leading-relaxed backdrop-blur-sm"
-              />
-              {/* Mic button — bottom-right corner of textarea */}
-              <div className="absolute bottom-4 right-4">
-                <AudioRecorder
-                  onTranscription={handleTranscription}
-                  isLoading={loading}
-                />
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-white/95 p-4 min-h-28 max-h-48 overflow-y-auto">
+                {voiceDraft || voiceInterim ? (
+                  <p className="text-sm text-slate-700 leading-7 whitespace-pre-wrap">
+                    {voiceDraft}
+                    {voiceInterim ? <span className="text-slate-400 italic"> {voiceInterim}</span> : null}
+                  </p>
+                ) : (
+                  <p className="text-sm text-slate-400">Start speaking and your transcript will appear here.</p>
+                )}
+              </div>
+
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVoiceDraft('')
+                    setVoiceInterim('')
+                  }}
+                  className="px-3 py-2 rounded-lg text-sm text-slate-500 hover:text-slate-700"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={handleVoiceSubmit}
+                  disabled={loading || !voiceDraft.trim()}
+                  className="px-4 py-2 rounded-xl bg-slate-700 text-white text-sm hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400"
+                >
+                  Send to MindMate
+                </button>
               </div>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* Tone Preferences — visible inline section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35, duration: 0.6 }}
-          className="glass rounded-3xl p-8 mb-10 border border-gray-700/50"
-        >
-          <h2 className="text-2xl font-bold text-gray-100 mb-6 flex items-center gap-3">
-            <span className="text-3xl">🎭</span>
-            <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">
-              Response Tone
-            </span>
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {TONE_OPTIONS.map((t) => (
-              <motion.button
-                key={t.value}
-                onClick={() => handleToneSelect(t.value)}
-                disabled={toneSaving}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                className={`text-left px-4 py-4 rounded-2xl border transition-all duration-200 disabled:opacity-50 cursor-pointer ${currentTone === t.value
-                    ? 'bg-violet-500/20 border-violet-500/40 shadow-lg shadow-violet-500/10'
-                    : 'bg-black/20 border-gray-700/30 hover:bg-black/30 hover:border-gray-600/40'
-                  }`}
+      <div className="w-full max-w-[900px] h-screen px-3 sm:px-6 py-3 sm:py-5">
+        <div className="h-full rounded-[2rem] sm:rounded-[2.3rem] border border-white/70 bg-white/70 backdrop-blur-sm shadow-[0_18px_50px_rgba(15,23,42,0.08)] flex flex-col overflow-hidden">
+          <header className="flex-none px-4 sm:px-6 pt-4 sm:pt-5 pb-3 flex items-center justify-between border-b border-slate-200/60">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.17em] text-slate-400">MindMate</p>
+              <h1 className="text-sm sm:text-base text-slate-600 mt-1">Calm thinking workspace</h1>
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className={`p-2 rounded-full transition-colors ${
+                  showSettings ? 'bg-slate-200/80 text-slate-700' : 'text-slate-400 hover:bg-slate-100'
+                }`}
+                aria-label="Toggle settings"
               >
-                <div className="text-2xl mb-2">{t.icon}</div>
-                <div className={`text-sm font-bold mb-0.5 ${currentTone === t.value ? 'text-violet-300' : 'text-gray-300'
-                  }`}>{t.label}</div>
-                <div className="text-xs text-gray-500 leading-snug">{t.desc}</div>
-                {currentTone === t.value && (
-                  <div className="mt-2 text-xs text-violet-400 font-semibold">✓ Active</div>
-                )}
-              </motion.button>
-            ))}
-          </div>
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
+          </header>
 
-          {/* Profanity opt-in warning */}
           <AnimatePresence>
-            {showProfanityWarning && (
+            {showSettings && (
               <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mt-4 bg-orange-500/10 border border-orange-500/30 rounded-xl p-4"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25 }}
+                className="overflow-hidden bg-white/80 border-b border-slate-200/60"
               >
-                <p className="text-orange-300 text-xs mb-3">
-                  <strong>⚠️ Explicit Language:</strong> This enables profanity in AI responses. Direct and raw — no slurs, just unfiltered talk.
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => saveTone('blunt_profane')}
-                    disabled={toneSaving}
-                    className="px-4 py-2 bg-orange-500/20 border border-orange-500/30 rounded-lg text-orange-300 text-xs font-semibold hover:bg-orange-500/30 transition-all disabled:opacity-50 cursor-pointer"
-                  >
-                    {toneSaving ? 'Saving...' : 'I understand, enable it'}
-                  </button>
-                  <button
-                    onClick={() => setShowProfanityWarning(false)}
-                    className="px-4 py-2 text-gray-400 text-xs hover:text-gray-300 transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
+                <div className="px-4 sm:px-6 py-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium text-slate-600">Agent Influence</h3>
+                    <button onClick={signOut} className="text-xs text-slate-500 hover:text-slate-700">
+                      Sign out
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-4">
+                    {agentConfig.map((agent) => (
+                      <WeightSlider
+                        key={agent.key}
+                        label={agent.label}
+                        value={weights[agent.key]}
+                        onChange={(val) => updateWeight(agent.key, val)}
+                        color={agent.color}
+                        disabled={loading}
+                      />
+                    ))}
+                  </div>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
 
-        {/* Weight Controls — PRESERVED from original */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.6 }}
-          className="glass rounded-3xl p-8 mb-10 border border-gray-700/50"
-        >
-          <h2 className="text-2xl font-bold text-gray-100 mb-8 flex items-center gap-3">
-            <span className="text-3xl">⚡</span>
-            <span className="bg-gradient-to-r from-cyan-400 to-violet-400 bg-clip-text text-transparent">
-              Agent Influence
-            </span>
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {agentConfig.map((agent, idx) => (
-              <motion.div
-                key={agent.key}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 + idx * 0.1 }}
-              >
-                <WeightSlider
-                  label={agent.label}
-                  value={weights[agent.key]}
-                  onChange={(val) => updateWeight(agent.key, val)}
-                  color={agent.color}
-                  disabled={loading}
-                />
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
+          <main className="flex-1 overflow-y-auto px-4 sm:px-6 pt-5 pb-3">
+            <AnimatePresence mode="popLayout">
+              {!hasMessages ? (
+                <motion.div
+                  key="empty"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: isComposing ? -8 : 0 }}
+                  exit={{ opacity: 0, y: -16 }}
+                  transition={{ duration: 0.35 }}
+                  className="min-h-[50vh] flex flex-col items-center justify-center text-center"
+                >
+                  <div className="mb-5">
+                    <Blob tone={currentTone} size="md" />
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-medium text-slate-700">A quiet place to think</h2>
+                  <p className="text-sm sm:text-base text-slate-500 mt-2 max-w-md">
+                    Start typing below. Your conversation builds here naturally.
+                  </p>
+                </motion.div>
+              ) : (
+                <div className="mx-auto w-full max-w-[680px] flex flex-col gap-9 sm:gap-11 pb-3">
+                  {messages.map((msg, idx) => (
+                    <motion.div
+                      key={msg.id}
+                      layout="position"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: getMessageOpacity(idx), y: 0 }}
+                      transition={{ duration: 0.32 }}
+                      className={`w-full flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      {msg.role === 'user' ? (
+                        <div className="max-w-[88%] rounded-[1.5rem] rounded-tr-lg px-4 sm:px-5 py-3.5 bg-slate-700 text-white">
+                          <p className="text-[15px] sm:text-base leading-7 whitespace-pre-wrap">{msg.content}</p>
+                        </div>
+                      ) : (
+                        <div className="w-full max-w-[92%]">
+                          <div className="rounded-[1.55rem] rounded-tl-lg px-4 sm:px-5 py-4 bg-[#ffffff] border border-slate-200/90 shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
+                            <MarkdownRenderer content={msg.data.final_decision} className="text-slate-800" />
+                          </div>
 
-        {/* Submit Button — PRESERVED from original */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.8, type: 'spring', stiffness: 200, damping: 15 }}
-          className="flex justify-center mb-20"
-        >
-          <motion.button
-            onClick={handleSubmit}
-            disabled={loading || !query.trim()}
-            whileHover={{
-              scale: loading ? 1 : 1.05,
-              boxShadow: loading ? undefined : '0 0 60px rgba(6, 255, 240, 0.6), 0 0 100px rgba(168, 85, 247, 0.4)'
-            }}
-            whileTap={{ scale: loading ? 1 : 0.95 }}
-            className="group relative px-16 py-6 bg-gradient-to-r from-cyan-500 via-violet-500 to-emerald-500 rounded-2xl font-bold text-white text-xl shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all overflow-hidden"
-            style={{
-              boxShadow: '0 0 40px rgba(6, 255, 240, 0.4), 0 0 80px rgba(168, 85, 247, 0.3)'
-            }}
-          >
-            {/* Animated background shine */}
-            <motion.div
-              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent"
-              animate={{
-                x: loading ? ['-200%', '200%'] : 0
-              }}
-              transition={{
-                duration: 1.2,
-                repeat: loading ? Infinity : 0,
-                ease: 'linear'
-              }}
-            />
+                          <div className="mt-3 flex items-center gap-3">
+                            <button
+                              onClick={() => toggleInsights(msg.id)}
+                              className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                              {expandedInsights[msg.id] ? 'Hide details' : 'See details'}
+                            </button>
+                          </div>
 
-            {/* Particle effects on hover */}
-            {!loading && (
-              <motion.div
-                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-              >
-                {[...Array(3)].map((_, i) => (
-                  <motion.div
-                    key={i}
-                    className="absolute w-1 h-1 bg-white rounded-full"
-                    animate={{
-                      x: [Math.random() * 100 - 50, Math.random() * 100 - 50],
-                      y: [Math.random() * 100 - 50, Math.random() * 100 - 50],
-                      opacity: [0, 1, 0]
-                    }}
-                    transition={{
-                      duration: 2,
-                      repeat: Infinity,
-                      delay: i * 0.3
-                    }}
-                    style={{ left: '50%', top: '50%' }}
-                  />
-                ))}
+                          <AnimatePresence>
+                            {expandedInsights[msg.id] && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.25 }}
+                                className="overflow-hidden mt-3 flex flex-col gap-3"
+                              >
+                                {agentConfig.map((agent, agentIdx) => (
+                                  <AgentCard
+                                    key={agent.key}
+                                    name={agent.label}
+                                    descriptor={agent.descriptor}
+                                    output={msg.data.agent_outputs[agent.key]}
+                                    color={agent.color}
+                                    delay={agentIdx * 0.06}
+                                  />
+                                ))}
+                                <ExplanationPanel explanation={msg.data.explanation} />
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+
+                          <div className="mt-3">
+                            <FeedbackPanel query={msg.query} />
+                          </div>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </AnimatePresence>
+
+            {loading && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mx-auto w-full max-w-[680px] pt-3 flex items-center gap-3 text-slate-500">
+                <Blob tone={currentTone} size="xs" isThinking />
+                <span className="text-sm">MindMate is thinking...</span>
               </motion.div>
             )}
 
-            <span className="relative z-10 flex items-center gap-4">
-              {loading ? (
-                <>
-                  <motion.span
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                    className="text-2xl"
-                  >
-                    ⚙️
-                  </motion.span>
-                  <span className="tracking-wide">Processing...</span>
-                </>
-              ) : (
-                <>
-                  <span className="text-2xl">🚀</span>
-                  <span className="tracking-wide">Run MindMate</span>
-                </>
-              )}
-            </span>
-          </motion.button>
-        </motion.div>
+            {error && (
+              <div className="mx-auto w-full max-w-[680px] mt-3 p-3 rounded-xl bg-red-50 border border-red-100 text-red-500 text-sm">
+                {error}
+              </div>
+            )}
 
-        {/* Error Display — PRESERVED from original */}
-        <AnimatePresence>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="glass rounded-xl p-4 mb-8 border-red-500/30 bg-red-500/10"
-            >
-              <p className="text-red-400 text-sm">
-                <strong>Error:</strong> {error}
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            <div ref={messagesEndRef} />
+          </main>
 
-        {/* Loading State — PRESERVED from original */}
-        <AnimatePresence>
-          {loading && <LoadingSpinner />}
-        </AnimatePresence>
-
-        {/* Results — PRESERVED from original, with new FeedbackPanel and ExplanationPanel */}
-        <AnimatePresence>
-          {result && !loading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="space-y-8"
-            >
-              {/* Final Decision - Prominent — PRESERVED */}
-              <motion.div
-                initial={{ opacity: 0, y: 40, scale: 0.9 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-                className="glass rounded-3xl p-10 border-3 border-emerald-500/40 neon-glow-emerald relative overflow-hidden"
+          <footer className="px-4 sm:px-6 pt-2 pb-4 sm:pb-5">
+            <div className="mx-auto w-full max-w-[680px]">
+              <form
+                onSubmit={handleSubmit}
+                className={`flex items-end gap-2 sm:gap-3 rounded-[1.8rem] border px-3 sm:px-4 py-2.5 bg-white/92 transition-shadow ${
+                  isComposing ? 'border-slate-300 shadow-[0_10px_28px_rgba(15,23,42,0.10)]' : 'border-slate-200 shadow-sm'
+                }`}
               >
-                {/* Decorative elements */}
-                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-500 via-cyan-500 to-violet-500 opacity-60" />
-                <div className="absolute -top-20 -right-20 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl" />
-                <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-cyan-500/10 rounded-full blur-3xl" />
-
-                <div className="relative z-10">
-                  <motion.h2
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="text-4xl font-bold mb-6 bg-gradient-to-r from-emerald-400 via-green-500 to-teal-400 bg-clip-text text-transparent flex items-center gap-3"
+                <div className="relative group shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsVoiceMode(true)}
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                    aria-label="Switch to voice mode"
+                    title="Switch to voice mode"
                   >
-                    <span className="text-4xl">🎯</span>
-                    Council Resolution
-                  </motion.h2>
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.4 }}
-                    className="text-lg leading-relaxed"
-                  >
-                    <MarkdownRenderer content={result.final_decision} />
-                  </motion.div>
+                    <Mic className="w-5 h-5" />
+                  </button>
+                  <div className="pointer-events-none absolute -top-11 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-800 px-2.5 py-1 text-[11px] text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                    Switch to voice mode
+                  </div>
                 </div>
 
-                {/* NEW: Dev-only explanation metadata */}
-                <ExplanationPanel explanation={result.explanation} />
-              </motion.div>
+                <textarea
+                  ref={queryInputRef}
+                  rows={1}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={handleQueryKeyDown}
+                  onFocus={() => setIsInputFocused(true)}
+                  onBlur={() => setIsInputFocused(false)}
+                  disabled={loading}
+                  placeholder="What are you thinking through right now?"
+                  className="chat-input-scroll flex-1 bg-transparent border-none outline-none text-slate-700 text-[15px] sm:text-base placeholder:text-slate-400 resize-none max-h-40 leading-6 py-1"
+                />
 
-              {/* NEW: Feedback Panel — optional, below decision */}
-              <FeedbackPanel query={query} />
-
-              {/* Agent Outputs — PRESERVED */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.6 }}
-              >
-                <motion.h2
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-3xl font-bold text-gray-100 mb-8 flex items-center gap-3"
+                <button
+                  type="submit"
+                  disabled={loading || !query.trim()}
+                  className="w-10 h-10 rounded-full bg-slate-700 text-white flex items-center justify-center hover:bg-slate-800 disabled:bg-slate-200 disabled:opacity-60"
+                  aria-label="Send message"
                 >
-                  <span className="text-3xl">🧠</span>
-                  <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
-                    Individual Perspectives
-                  </span>
-                </motion.h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {agentConfig.map((agent, idx) => (
-                    <AgentCard
-                      key={agent.key}
-                      name={agent.label}
-                      descriptor={agent.descriptor}
-                      output={result.agent_outputs[agent.key]}
-                      color={agent.color}
-                      delay={0.8 + idx * 0.15}
-                    />
-                  ))}
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+                  <Send className="w-4 h-4" />
+                </button>
+              </form>
 
+              <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
+                {TONE_OPTIONS.map((tone) => (
+                  <button
+                    key={tone.value}
+                    type="button"
+                    onClick={() => handleToneSelect(tone.value)}
+                    disabled={toneSaving}
+                    className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                      currentTone === tone.value
+                        ? 'bg-slate-700 border-slate-700 text-white'
+                        : 'bg-white/90 border-slate-200 text-slate-600 hover:border-slate-300'
+                    } disabled:opacity-60`}
+                  >
+                    {tone.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </footer>
+        </div>
+      </div>
     </div>
   )
 }

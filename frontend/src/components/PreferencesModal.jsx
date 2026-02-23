@@ -18,7 +18,7 @@ const TONES = [
   { value: 'clean', label: 'Clean', desc: 'Professional and respectful', icon: '✨' },
   { value: 'casual', label: 'Casual', desc: 'Relaxed, like talking to a friend', icon: '💬' },
   { value: 'blunt', label: 'Blunt', desc: 'Direct, no sugar-coating', icon: '🎯' },
-  { value: 'blunt_profane', label: 'Blunt + Profanity', desc: 'Raw and unfiltered (opt-in)', icon: '🔥', warning: true },
+  { value: 'blunt_profane', label: 'Blunt + Profanity', desc: 'Raw and unfiltered', icon: '🔥' },
 ]
 
 export default function PreferencesModal({ isOpen, onClose }) {
@@ -26,7 +26,6 @@ export default function PreferencesModal({ isOpen, onClose }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
-  const [showProfanityWarning, setShowProfanityWarning] = useState(false)
   const [saved, setSaved] = useState(false)
 
   // Fetch current preferences when modal opens
@@ -44,12 +43,8 @@ export default function PreferencesModal({ isOpen, onClose }) {
   }, [isOpen])
 
   const handleToneSelect = async (newTone) => {
-    // Show profanity warning if selecting blunt_profane
-    if (newTone === 'blunt_profane' && tone !== 'blunt_profane') {
-      setShowProfanityWarning(true)
-      return
-    }
-    await saveTone(newTone, false)
+    const confirmContradiction = newTone === 'blunt_profane'
+    await saveTone(newTone, confirmContradiction)
   }
 
   const saveTone = async (newTone, confirmContradiction) => {
@@ -68,7 +63,6 @@ export default function PreferencesModal({ isOpen, onClose }) {
       }
       setTone(newTone)
       setSaved(true)
-      setShowProfanityWarning(false)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) {
       setError(err.message)
@@ -147,31 +141,6 @@ export default function PreferencesModal({ isOpen, onClose }) {
                   </div>
                 </button>
               ))}
-            </div>
-          )}
-
-          {/* Profanity Warning */}
-          {showProfanityWarning && (
-            <div className="mt-4 bg-orange-500/10 border border-orange-500/30 rounded-xl p-4">
-              <p className="text-orange-300 text-xs mb-3">
-                <strong>⚠️ Explicit Language:</strong> This enables profanity in responses.
-                The AI will be raw and unfiltered. No slurs or harassment — just direct language.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => saveTone('blunt_profane', true)}
-                  disabled={saving}
-                  className="px-4 py-2 bg-orange-500/20 border border-orange-500/30 rounded-lg text-orange-300 text-xs font-semibold hover:bg-orange-500/30 transition-all disabled:opacity-50"
-                >
-                  {saving ? 'Saving...' : 'I understand, enable it'}
-                </button>
-                <button
-                  onClick={() => setShowProfanityWarning(false)}
-                  className="px-4 py-2 text-gray-400 text-xs hover:text-gray-300 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
           )}
 

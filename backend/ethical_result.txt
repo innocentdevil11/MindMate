@@ -1,0 +1,26 @@
+﻿
+=======================================================
+TEST: Ethical Brain with Blunt Tone (Bug)
+QUERY: 'hi'
+WEIGHTS: {'ethical': 1.0, 'analytical': 0.0, 'emotional': 0.0, 'values': 0.0, 'red_team': 0.0}
+TONE: blunt_profane
+=======================================================
+
+Intent:     greeting
+Complexity: simple
+
+FINAL RESPONSE:
+Not much, just chillin' here. What's on your mind, friend?
+
+=======================================================
+TEST: Ethical Brain with Clean Tone (Fix)
+QUERY: 'hi'
+WEIGHTS: {'ethical': 1.0, 'analytical': 0.0, 'emotional': 0.0, 'values': 0.0, 'red_team': 0.0}
+TONE: clean
+=======================================================
+
+Intent:     greeting
+Complexity: simple
+
+FINAL RESPONSE:
+It's a pleasure to connect with you. I'm here to offer guidance and support when you need it. How can I help you today?

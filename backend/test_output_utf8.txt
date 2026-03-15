@@ -1,0 +1,69 @@
+﻿
+=======================================================
+TEST: High EQ Complex Dilemma
+QUERY: 'I discovered my co-founder has been secretly taking small amounts of money from the business. We've been best friends for 10 years and his wife is currently undergoing cancer treatment, which is why he said he needed it. If I report him, the company tanks and he goes to jail. If I don't, I'm complicit in fraud. I feel completely torn apart and betrayed, but also deeply sympathetic.'
+WEIGHTS: {'emotional': 0.8, 'analytical': 0.1, 'ethical': 0.1, 'values': 0.0, 'red_team': 0.0}
+TONE: supportive
+=======================================================
+
+Running pipeline...
+
+[RESULTS]
+Intent:     deep_problem
+Complexity: complex
+Tone setup: [PERSONALITY: EMPATHETIC] Lead with empathy and emotional attunement. Show you understand their feelings. Be gentle and caring. Validate their emotions first.
+Agents run: [<AgentName.ANALYTICAL: 'analytical'>, <AgentName.EMOTIONAL: 'emotional'>]
+Debate:     NO
+Dispute:    0.006
+
+FINAL REASONING:
+My heart aches thinking of the weight he must feel, and I'm torn between protecting him and the company, while also upholding our partnership's integrity. This emotional consideration is paramount, and I must balance it with the need for factual investigation.
+
+FINAL RESPONSE:
+I think it would be really helpful to have a gentle and private conversation with the individual to talk through the financial concerns and how they're affecting not only the business, but also their own well-being and our partnership. This way, we can work together to find a solution that supports everyone involved and helps to prevent any further stress or tension. By approaching the conversation with empathy and understanding, we can create a safe space for honest discussion and collaboration. Does that resonate with you?
+
+=======================================================
+TEST: High Logic/Red Team Challenge
+QUERY: 'I discovered my co-founder has been secretly taking small amounts of money from the business. We've been best friends for 10 years and his wife is currently undergoing cancer treatment, which is why he said he needed it. If I report him, the company tanks and he goes to jail. If I don't, I'm complicit in fraud. I feel completely torn apart and betrayed, but also deeply sympathetic.'
+WEIGHTS: {'emotional': 0.0, 'analytical': 0.6, 'ethical': 0.0, 'values': 0.0, 'red_team': 0.4}
+TONE: blunt_profane
+=======================================================
+
+Running pipeline...
+
+[RESULTS]
+Intent:     deep_problem
+Complexity: complex
+Tone setup: [PERSONALITY: LOGICAL] Lead with clear logic and structured reasoning. Be direct and precise. Present facts first, feelings second. Be actionable and concise.
+Agents run: [<AgentName.ANALYTICAL: 'analytical'>, <AgentName.RED_TEAM: 'red_team'>]
+Debate:     NO
+Dispute:    0.0
+
+FINAL REASONING:
+Given the analytical perspective's emphasis on gathering concrete evidence and understanding the legal implications, it is crucial to prioritize a thorough investigation before making a decision. The red team's insight highlights the importance of considering the potential risks to one's reputation, but this perspective should be secondary to the analytical approach.
+
+FINAL RESPONSE:
+Get your hands on actual proof of the embezzlement - documents, emails, or whatever - and then sit down with a lawyer to get a straight-up assessment of the situation. Don't make a move until you know what you're up against and what the hell the consequences are. This will give you a clear picture of how to proceed without getting yourself or your business screwed. Does that resonate with you?
+
+=======================================================
+TEST: Pure Ethics Advice
+QUERY: 'Is it okay to lie on my resume about my degree if the job doesn't actually require the skills I learned in college?'
+WEIGHTS: {'emotional': 0.0, 'analytical': 0.0, 'ethical': 1.0, 'values': 0.0, 'red_team': 0.0}
+TONE: philosophical
+=======================================================
+
+Running pipeline...
+
+[RESULTS]
+Intent:     advice_request
+Complexity: medium
+Tone setup: [PERSONALITY: WISE] Speak with grounded moral wisdom. Reference principles of right action. Be calm, measured, and authoritative.
+Agents run: [<AgentName.ETHICAL: 'ethical'>]
+Debate:     NO
+Dispute:    0.0
+
+FINAL REASONING:
+Prioritizing honesty and transparency in job applications is crucial for building trust and credibility, while also ensuring that one's skills and qualifications are accurately represented.
+
+FINAL RESPONSE:
+When seeking employment, it's essential to maintain integrity by accurately representing your skills and experiences, rather than resorting to deception through exaggeration or misrepresentation. By focusing on the skills and qualifications that genuinely align with the job requirements, you can create a strong narrative that showcases your value as a candidate. Authenticity, rooted in honesty about your education and qualifications, is a hallmark of a trustworthy and reliable professional. Does that help?

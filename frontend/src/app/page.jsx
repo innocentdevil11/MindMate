@@ -3,21 +3,19 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Settings, Send, Mic, X } from 'lucide-react'
+import { Settings, Send, Mic, Plus, Menu, Edit3, AlignJustify } from 'lucide-react'
 import WeightSlider from '@/components/WeightSlider'
-import AgentCard from '@/components/AgentCard'
 import MarkdownRenderer from '@/components/MarkdownRenderer'
 import Blob from '@/components/Blob'
 import { useAuth } from '@/context/AuthContext'
 import { api } from '@/lib/api'
 import FeedbackPanel from '@/components/FeedbackPanel'
-import ExplanationPanel from '@/components/ExplanationPanel'
 
 const agentConfig = [
   { key: 'ethical', label: 'Ethical', descriptor: 'Moral and philosophical perspective', color: 'violet' },
-  { key: 'risk', label: 'Risk and Logic', descriptor: 'Analytical risk assessment', color: 'orange' },
-  { key: 'eq', label: 'EQ', descriptor: 'Emotional intelligence lens', color: 'pink' },
-  { key: 'values', label: 'Value Alignment', descriptor: 'Personal values harmony', color: 'emerald' },
+  { key: 'analytical', label: 'Analytical', descriptor: 'Logic and risk assessment', color: 'orange' },
+  { key: 'emotional', label: 'Emotional', descriptor: 'Emotional intelligence lens', color: 'pink' },
+  { key: 'values', label: 'Values', descriptor: 'Personal values harmony', color: 'emerald' },
   { key: 'red_team', label: 'Red Team', descriptor: 'Devils advocate perspective', color: 'cyan' },
 ]
 
@@ -38,12 +36,20 @@ const TONE_LABELS = {
 export default function Home() {
   const [query, setQuery] = useState('')
   const [messages, setMessages] = useState([])
+  const [conversationId, setConversationId] = useState(null)
+  const [conversations, setConversations] = useState([])
+  const [conversationsLoading, setConversationsLoading] = useState(false)
+  const [conversationError, setConversationError] = useState(null)
+  const [showComposerExtras, setShowComposerExtras] = useState(false)
+  const [showSidebar, setShowSidebar] = useState(false)
+  const [renameDraftId, setRenameDraftId] = useState(null)
+  const [renameDraftValue, setRenameDraftValue] = useState('')
   const [weights, setWeights] = useState({
     ethical: 0.2,
-    risk: 0.2,
-    eq: 0.2,
+    analytical: 0.25,
+    emotional: 0.25,
     values: 0.2,
-    red_team: 0.2,
+    red_team: 0.0,
   })
 
   const [isVoiceMode, setIsVoiceMode] = useState(false)
@@ -82,12 +88,11 @@ export default function Home() {
   }, [user, authLoading, router])
 
   useEffect(() => {
-    if (!user) return
-    api
-      .get('/preferences')
-      .then((data) => setCurrentTone(data.tone_preference || 'clean'))
-      .catch(() => {})
-  }, [user])
+    if (authLoading || !user) return
+    refreshConversations()
+  }, [authLoading, user])
+
+  // Removed legacy /preferences fetch to prevent old tone overrides
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -150,6 +155,92 @@ export default function Home() {
     }
   }, [isVoiceSupported])
 
+  const refreshConversations = async () => {
+    setConversationsLoading(true)
+    setConversationError(null)
+    try {
+      const data = await api.get('/conversations')
+      setConversations(data || [])
+    } catch (err) {
+      setConversationError(err.message)
+    } finally {
+      setConversationsLoading(false)
+    }
+  }
+
+  const hydrateHistoryMessages = (history) => {
+    if (!history || !history.messages) return []
+    return history.messages.map((m) => {
+      if (m.role === 'user') {
+        return { id: m.id, role: 'user', content: m.content }
+      }
+
+      return {
+        id: m.id,
+        role: 'assistant',
+        data: {
+          response: addFriendlyEmoji(m.content || ''),
+          conversation_id: history.id,
+          message_id: m.id,
+          intent: null,
+          complexity: null,
+          thinking_trace_id: m.trace_id,
+        },
+        query: null,
+      }
+    })
+  }
+
+  const loadConversation = async (id) => {
+    if (!id) return
+    setLoading(true)
+    setConversationError(null)
+    try {
+      const data = await api.get(`/conversations/${id}`)
+      setConversationId(data.id)
+      setMessages(hydrateHistoryMessages(data))
+      setExpandedInsights({})
+      setShowSidebar(false)
+    } catch (err) {
+      setConversationError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRenameConversation = async (conversation) => {
+    if (!conversation?.id) return
+    const trimmed = renameDraftValue.trim()
+    if (!trimmed || trimmed === conversation.title) {
+      setRenameDraftId(null)
+      setRenameDraftValue('')
+      return
+    }
+
+    try {
+      setConversations((prev) => prev.map((c) => (
+        c.id === conversation.id ? { ...c, title: trimmed, updated_at: new Date().toISOString() } : c
+      )))
+
+      await api.patch(`/conversations/${conversation.id}/title`, { title: trimmed })
+      setRenameDraftId(null)
+      setRenameDraftValue('')
+      refreshConversations()
+    } catch (err) {
+      setConversationError(err.message)
+      setRenameDraftId(null)
+      setRenameDraftValue('')
+      refreshConversations()
+    }
+  }
+
+  const handleNewConversation = () => {
+    setConversationId(null)
+    setMessages([])
+    setExpandedInsights({})
+    setQuery('')
+  }
+
   const startVoiceCapture = () => {
     if (!voiceRecognitionRef.current || loading || isVoiceListening) return
     try {
@@ -180,11 +271,32 @@ export default function Home() {
     setError(null)
 
     try {
-      const data = await api.post('/decision', {
+      const payload = {
         query: text,
-        weights,
-      })
-      setMessages((prev) => [...prev, { id: Date.now() + 1, role: 'assistant', data, query: text }])
+        brain_weights: weights,
+        tone: currentTone,
+      }
+      // Include conversation_id for follow-up messages
+      if (conversationId) {
+        payload.conversation_id = conversationId
+      }
+
+      const data = await api.post('/chat', payload)
+
+      // Track conversation for follow-ups
+      if (data.conversation_id) {
+        setConversationId(data.conversation_id)
+      }
+
+      setMessages((prev) => [...prev, {
+        id: Date.now() + 1,
+        role: 'assistant',
+        data: { ...data, response: addFriendlyEmoji(data.response || '') },
+        query: text,
+      }])
+
+      // Refresh list so sidebar shows newest title/order
+      refreshConversations()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -222,21 +334,8 @@ export default function Home() {
     setWeights((prev) => ({ ...prev, [key]: value }))
   }
 
-  const saveTone = async (newTone) => {
-    const previousTone = currentTone
+  const saveTone = (newTone) => {
     setCurrentTone(newTone)
-    setToneSaving(true)
-    try {
-      await api.put('/preferences', {
-        tone_preference: newTone,
-        confirm_contradiction: true,
-      })
-    } catch (err) {
-      console.warn('Failed to save tone:', err.message)
-      setCurrentTone(previousTone)
-    } finally {
-      setToneSaving(false)
-    }
   }
 
   const handleToneSelect = async (newTone) => {
@@ -244,11 +343,12 @@ export default function Home() {
     await saveTone(newTone)
   }
 
-  const toggleInsights = (msgId) => {
-    setExpandedInsights((prev) => ({
-      ...prev,
-      [msgId]: !prev[msgId],
-    }))
+  const addFriendlyEmoji = (text) => {
+    const emojiPool = ['🙂', '😊', '😉', '👍', '🙏', '🙌', '😅', '💡']
+    const alreadyHasEmoji = /[\u{1F300}-\u{1FAFF}]/u.test(text)
+    if (alreadyHasEmoji) return text
+    const pick = emojiPool[text.length % emojiPool.length]
+    return `${text.trim()} ${pick}`
   }
 
   const getMessageOpacity = (index) => {
@@ -366,12 +466,153 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      <div className="w-full max-w-[900px] h-screen px-3 sm:px-6 py-3 sm:py-5">
-        <div className="h-full rounded-[2rem] sm:rounded-[2.3rem] border border-white/70 bg-white/70 backdrop-blur-sm shadow-[0_18px_50px_rgba(15,23,42,0.08)] flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-[1200px] h-screen px-3 sm:px-6 py-3 sm:py-5 flex gap-4">
+        <AnimatePresence>
+          {showSidebar && (
+            <motion.aside
+              initial={{ opacity: 0, x: -12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -16 }}
+              transition={{ duration: 0.22 }}
+              className="absolute md:static left-3 top-3 md:top-auto md:left-auto z-30 w-72 flex-none"
+            >
+              <div className="h-full w-full rounded-[1.75rem] border border-white/70 bg-white/90 backdrop-blur-sm shadow-[0_14px_40px_rgba(15,23,42,0.08)] flex flex-col overflow-hidden">
+                <div className="px-4 py-4 border-b border-slate-200/70 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setShowSidebar(false)}
+                    className="flex items-center gap-3 text-slate-500 hover:text-slate-700"
+                    aria-label="Hide conversations"
+                  >
+                    <span className="flex flex-col gap-[3px]" aria-hidden="true">
+                      <span className="w-5 h-[2px] bg-slate-500 rounded-full" />
+                      <span className="w-5 h-[2px] bg-slate-500 rounded-full" />
+                      <span className="w-5 h-[2px] bg-slate-500 rounded-full" />
+                    </span>
+                    <div className="text-left">
+                      <p className="text-[11px] uppercase tracking-[0.15em] text-slate-400">Conversations</p>
+                      <p className="text-sm text-slate-600">Your recent threads</p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNewConversation}
+                    className="p-2 rounded-full text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                    aria-label="Start new conversation"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto">
+                  {conversationsLoading ? (
+                    <div className="px-4 py-4 text-slate-400 text-sm">Loading...</div>
+                  ) : conversationError ? (
+                    <div className="px-4 py-4 text-red-500 text-sm">{conversationError}</div>
+                  ) : conversations.length === 0 ? (
+                    <div className="px-4 py-6 text-slate-400 text-sm">No conversations yet.</div>
+                  ) : (
+                    <ul className="divide-y divide-slate-100">
+                      {conversations.map((c) => (
+                        <li key={c.id}>
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => loadConversation(c.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') loadConversation(c.id)
+                            }}
+                            className={`group flex items-center justify-between gap-2 px-4 py-3 hover:bg-slate-50 transition-colors ${
+                              conversationId === c.id ? 'bg-slate-100/80' : ''
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              {renameDraftId === c.id ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    autoFocus
+                                    value={renameDraftValue}
+                                    onChange={(e) => setRenameDraftValue(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="flex-1 rounded-lg border border-slate-200 px-2 py-1 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleRenameConversation(c)
+                                    }}
+                                    className="px-2 py-1 rounded-md bg-slate-700 text-white text-xs hover:bg-slate-800"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setRenameDraftId(null)
+                                      setRenameDraftValue('')
+                                    }}
+                                    className="px-2 py-1 rounded-md text-slate-500 hover:text-slate-700 text-xs"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <p className="text-sm font-medium text-slate-700 truncate">{c.title || 'New Conversation'}</p>
+                                  <p className="text-[11px] text-slate-400 mt-0.5">{c.updated_at ? new Date(c.updated_at).toLocaleString() : ''}</p>
+                                </>
+                              )}
+                            </div>
+                            {renameDraftId !== c.id && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setRenameDraftId(c.id)
+                                  setRenameDraftValue(c.title || 'New Conversation')
+                                }}
+                                className="p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                                aria-label="Rename conversation"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+
+        {showSidebar && (
+          <button
+            type="button"
+            className="fixed inset-0 bg-black/10 backdrop-blur-[1px] md:hidden"
+            onClick={() => setShowSidebar(false)}
+            aria-label="Close conversations overlay"
+          />
+        )}
+
+        <div className="flex-1 h-full rounded-[2rem] sm:rounded-[2.3rem] border border-white/70 bg-white/70 backdrop-blur-sm shadow-[0_18px_50px_rgba(15,23,42,0.08)] flex flex-col overflow-hidden">
           <header className="flex-none px-4 sm:px-6 pt-4 sm:pt-5 pb-3 flex items-center justify-between border-b border-slate-200/60">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.17em] text-slate-400">MindMate</p>
-              <h1 className="text-sm sm:text-base text-slate-600 mt-1">Calm thinking workspace</h1>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowSidebar((prev) => !prev)}
+                className="p-2 -ml-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                aria-label="Toggle conversations"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.17em] text-slate-400">MindMate</p>
+                <h1 className="text-sm sm:text-base text-slate-600 mt-0.5">Calm thinking workspace</h1>
+              </div>
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2">
@@ -457,45 +698,22 @@ export default function Home() {
                       ) : (
                         <div className="w-full max-w-[92%]">
                           <div className="rounded-[1.55rem] rounded-tl-lg px-4 sm:px-5 py-4 bg-[#ffffff] border border-slate-200/90 shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
-                            <MarkdownRenderer content={msg.data.final_decision} className="text-slate-800" />
+                            <MarkdownRenderer content={msg.data.response} className="text-slate-800" />
                           </div>
 
-                          <div className="mt-3 flex items-center gap-3">
-                            <button
-                              onClick={() => toggleInsights(msg.id)}
-                              className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
-                            >
-                              {expandedInsights[msg.id] ? 'Hide details' : 'See details'}
-                            </button>
-                          </div>
+                          {/* Intent & Complexity badges removed for a cleaner UI */}
 
-                          <AnimatePresence>
-                            {expandedInsights[msg.id] && (
-                              <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                exit={{ opacity: 0, height: 0 }}
-                                transition={{ duration: 0.25 }}
-                                className="overflow-hidden mt-3 flex flex-col gap-3"
-                              >
-                                {agentConfig.map((agent, agentIdx) => (
-                                  <AgentCard
-                                    key={agent.key}
-                                    name={agent.label}
-                                    descriptor={agent.descriptor}
-                                    output={msg.data.agent_outputs[agent.key]}
-                                    color={agent.color}
-                                    delay={agentIdx * 0.06}
-                                  />
-                                ))}
-                                <ExplanationPanel explanation={msg.data.explanation} />
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
+                          {/* "See how I thought" UI completely removed */}
 
-                          <div className="mt-3">
-                            <FeedbackPanel query={msg.query} />
-                          </div>
+                          {idx === messages.length - 1 && (
+                            <div className="mt-3">
+                              <FeedbackPanel
+                                conversationId={msg.data.conversation_id}
+                                messageId={msg.data.message_id}
+                                brainConfig={weights}
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
                     </motion.div>
@@ -566,23 +784,47 @@ export default function Home() {
                 </button>
               </form>
 
-              <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
-                {TONE_OPTIONS.map((tone) => (
-                  <button
-                    key={tone.value}
-                    type="button"
-                    onClick={() => handleToneSelect(tone.value)}
-                    disabled={toneSaving}
-                    className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
-                      currentTone === tone.value
-                        ? 'bg-slate-700 border-slate-700 text-white'
-                        : 'bg-white/90 border-slate-200 text-slate-600 hover:border-slate-300'
-                    } disabled:opacity-60`}
-                  >
-                    {tone.label}
-                  </button>
-                ))}
+              <div className="mt-2 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setShowComposerExtras((prev) => !prev)}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:border-slate-300 hover:text-slate-800 bg-white/90"
+                >
+                  <AlignJustify className="w-4 h-4" />
+                  {showComposerExtras ? 'Hide controls' : 'Show controls'}
+                </button>
+                <span className="text-[11px] text-slate-400">Tone and style tweaks</span>
               </div>
+
+              <AnimatePresence>
+                {showComposerExtras && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
+                      {TONE_OPTIONS.map((tone) => (
+                        <button
+                          key={tone.value}
+                          type="button"
+                          onClick={() => handleToneSelect(tone.value)}
+                          disabled={toneSaving}
+                          className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                            currentTone === tone.value
+                              ? 'bg-slate-700 border-slate-700 text-white'
+                              : 'bg-white/90 border-slate-200 text-slate-600 hover:border-slate-300'
+                          } disabled:opacity-60`}
+                        >
+                          {tone.label}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </footer>
         </div>

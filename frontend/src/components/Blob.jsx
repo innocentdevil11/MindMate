@@ -25,43 +25,59 @@ const EyeShine = () => (
 )
 
 function Eyes({ tone }) {
+  if (tone === 'clean') {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center gap-6 pb-3">
+        {[0, 1].map((i) => (
+          <div key={i} className="w-5 h-5 rounded-full bg-slate-700 relative shadow-[0_2px_6px_rgba(0,0,0,0.15)]">
+            <EyeShine />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   if (tone === 'casual') {
     return (
       <div className="absolute inset-0 flex items-center justify-center gap-6 pb-3">
-        <div className="w-5 h-5 rounded-full bg-slate-700 relative">
-          <EyeShine />
-        </div>
-        <div className="w-5 h-5 rounded-full bg-slate-700 relative">
-          <EyeShine />
-        </div>
+        {[0, 1].map((i) => (
+          <div key={i} className="relative w-5 h-5 rounded-full bg-slate-700 shadow-[0_2px_6px_rgba(0,0,0,0.15)]">
+            <EyeShine />
+            <div className={`absolute -top-2 left-0 right-0 mx-auto h-1 rounded-full bg-slate-600/80 ${i === 1 ? 'rotate-6' : '-rotate-4'}`} />
+          </div>
+        ))}
       </div>
     )
   }
 
   if (tone === 'blunt') {
     return (
-      <div className="absolute inset-0 flex items-center justify-center gap-6 pb-3">
-        <div className="w-8 h-8 rounded-full bg-white/92 flex items-center justify-center shadow-inner">
-          <div className="w-4 h-4 rounded-full bg-slate-700 relative">
-            <EyeShine />
+      <div className="absolute inset-0 flex items-center justify-center gap-5 pb-2">
+        {[0, 1].map((i) => (
+          <div key={i} className="relative flex items-center justify-center">
+            <div className="absolute -top-1 left-0 right-0 h-1.5 bg-slate-900 rounded-full" />
+            <div className="w-6 h-3 rounded-[6px] bg-slate-900" />
           </div>
-        </div>
-        <div className="w-8 h-8 rounded-full bg-white/92 flex items-center justify-center shadow-inner">
-          <div className="w-4 h-4 rounded-full bg-slate-700 relative">
-            <EyeShine />
-          </div>
-        </div>
+        ))}
       </div>
     )
   }
 
   if (tone === 'blunt_profane') {
     return (
-      <div className="absolute inset-0 flex items-center justify-center gap-7 pb-3">
-        <div className="w-5 h-5 rounded-full bg-slate-700 relative">
-          <EyeShine />
+      <div className="absolute inset-0 flex items-center justify-center gap-7 pb-2">
+        <div className="relative flex items-center gap-1">
+          <div className="w-5 h-3 rounded-full bg-slate-800 relative">
+            <EyeShine />
+          </div>
+          <div className="absolute -top-2 left-0 right-0 h-1 bg-slate-800 rounded-full rotate-3" />
         </div>
-        <div className="w-6 h-2 border-b-[3px] border-slate-700 rounded-full -mt-1" />
+        <div className="relative w-5 h-5">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-4 h-1 rounded-full bg-slate-800 rotate-12" />
+          </div>
+          <div className="absolute -top-2 right-0 w-4 h-1 bg-slate-800 rounded-full -rotate-6" />
+        </div>
       </div>
     )
   }
@@ -80,21 +96,28 @@ function Eyes({ tone }) {
 
 function Mouth({ tone }) {
   if (tone === 'blunt') {
-    return <div className="w-11 h-1.5 rounded-full bg-slate-700" />
+    return <div className="w-12 h-[3px] rounded-full bg-slate-900" />
   }
 
   if (tone === 'blunt_profane') {
-    return <div className="w-12 h-5 border-b-[4px] border-slate-700 rounded-full" />
-  }
-
-  if (tone === 'casual') {
     return (
-      <div className="relative w-10 h-5">
-        <div className="absolute left-0 right-0 top-1 w-9 h-3 border-b-[3px] border-slate-700 rounded-full -rotate-8 mx-auto" />
+      <div className="px-3 py-1 rounded-lg bg-slate-900 text-white text-[10px] font-semibold tracking-[0.08em] shadow-sm">
+        #@!*
       </div>
     )
   }
 
+  if (tone === 'casual') {
+    return (
+      <div className="relative w-12 h-6">
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-10 h-4 border-b-[3px] border-slate-700 rounded-full" />
+        </div>
+      </div>
+    )
+  }
+
+  // clean and default
   return <div className="w-10 h-4 border-b-[3px] border-slate-700 rounded-full" />
 }
 

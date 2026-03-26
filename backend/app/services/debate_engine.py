@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 DISAGREEMENT_THRESHOLD = 0.3
 
 # Minimum disagreement to trigger debate at all
-DEBATE_THRESHOLD = 0.3
+DEBATE_THRESHOLD = 0.15
 
 # Maximum debate rounds
 MAX_DEBATE_ROUNDS = 2

@@ -168,10 +168,7 @@ def simple_response_node(state: MindMateState) -> dict:
     user_tone = state.get("tone_instruction", "clean")
     conversation_mode = state.get("conversation_mode", "normal")
 
-    # Override aggressive tones for simple greetings to preserve brain identity
-    if intent in (Intent.GREETING, Intent.CLOSING, Intent.GRATITUDE):
-        user_tone = "clean"
-
+    # Use the user's selected tone — always respect their preference
     tone = get_personality_tone(brain_config, user_tone)
 
     # ── CASUAL CHAT MODE: strict friend-mode prompt ──

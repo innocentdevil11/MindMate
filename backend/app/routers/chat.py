@@ -7,8 +7,6 @@ Handles the full pipeline: auth → memory → brain config → LangGraph → st
 
 import uuid
 import logging
-import asyncio
-import concurrent.futures
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -166,34 +164,20 @@ async def chat(
             "trace_steps": [],
         }
 
-        # Run graph with 15s timeout to prevent hanging
-        try:
-            loop = asyncio.get_event_loop()
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                result = await asyncio.wait_for(
-                    loop.run_in_executor(pool, graph.invoke, initial_state),
-                    timeout=15.0,
-                )
-        except asyncio.TimeoutError:
-            logger.warning("Graph execution timed out after 15s — using fallback")
+        # Run the graph pipeline directly
+        result = graph.invoke(initial_state)
+
+        # Empty-response fallback — guarantee we ALWAYS return something
+        final_response = (result.get("final_response") or "").strip()
+        if not final_response:
+            logger.warning("Empty response from pipeline — using fallback")
             fallback = call_groq(
                 system_prompt="You are MindMate, a thoughtful AI companion. Respond naturally and briefly.",
                 user_message=request.query,
                 temperature=0.7,
                 max_tokens=100,
             )
-            result = {
-                "final_response": fallback or "Hey — I'm here. What's on your mind?",
-                "intent": "smalltalk",
-                "complexity": "simple",
-                "trace_steps": [],
-            }
-
-        # Empty-response fallback — guarantee we ALWAYS return something
-        final_response = (result.get("final_response") or "").strip()
-        if not final_response:
-            logger.warning("Empty response from pipeline — using fallback")
-            final_response = "Hey — I'm here. What's on your mind?"
+            final_response = (fallback or "").strip() or "Hey — I'm here. What's on your mind?"
 
         # Step 6: Store AI response
         await store_message(conversation_id, user_id, "assistant", final_response)

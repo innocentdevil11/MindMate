@@ -30,6 +30,31 @@ async def submit_feedback(
     try:
         sb = get_supabase_admin()
 
+        # Ensure feedback can only be submitted for the user's own conversation/message.
+        conv = (
+            sb.table("conversations")
+            .select("id, user_id")
+            .eq("id", request.conversation_id)
+            .limit(1)
+            .execute()
+        )
+        if not conv.data:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if conv.data[0]["user_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+        msg = (
+            sb.table("messages")
+            .select("id")
+            .eq("id", request.message_id)
+            .eq("conversation_id", request.conversation_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not msg.data:
+            raise HTTPException(status_code=400, detail="Message not found for this conversation")
+
         # Store feedback
         payload = {
             "user_id": user_id,

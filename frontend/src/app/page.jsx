@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Settings, Send, Mic, Plus, Menu, Edit3, AlignJustify } from 'lucide-react'
+import { Settings, Send, Mic, Plus, Menu, Edit3, AlignJustify, X } from 'lucide-react'
 import WeightSlider from '@/components/WeightSlider'
 import MarkdownRenderer from '@/components/MarkdownRenderer'
 import Blob from '@/components/Blob'
@@ -64,7 +64,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const { user, loading: authLoading, signOut } = useAuth()
+  const { user, session, loading: authLoading, signOut } = useAuth()
   const router = useRouter()
   const messagesEndRef = useRef(null)
   const queryInputRef = useRef(null)
@@ -88,9 +88,9 @@ export default function Home() {
   }, [user, authLoading, router])
 
   useEffect(() => {
-    if (authLoading || !user) return
+    if (authLoading || !user || !session) return
     refreshConversations()
-  }, [authLoading, user])
+  }, [authLoading, user, session])
 
   // Removed legacy /preferences fetch to prevent old tone overrides
 
@@ -264,6 +264,10 @@ export default function Home() {
   const submitDecision = async (rawText) => {
     const text = rawText.trim()
     if (!text) return
+    if (!session) {
+      setError('Session not ready. Please sign in again.')
+      return
+    }
 
     const userMessage = { id: Date.now(), role: 'user', content: text }
     setMessages((prev) => [...prev, userMessage])

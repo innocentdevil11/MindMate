@@ -26,6 +26,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["trace"])
 
 
+def _assert_conversation_owner(sb, conversation_id: str, user_id: str) -> None:
+    conv = (
+        sb.table("conversations")
+        .select("id, user_id")
+        .eq("id", conversation_id)
+        .limit(1)
+        .execute()
+    )
+    if not conv.data:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conv.data[0]["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+
 @router.get("/trace/{conversation_id}")
 async def get_trace(
     conversation_id: str,
@@ -40,6 +54,7 @@ async def get_trace(
     """
     try:
         sb = get_supabase_admin()
+        _assert_conversation_owner(sb, conversation_id, user_id)
 
         query = (
             sb.table("thinking_trace")
@@ -77,6 +92,7 @@ async def get_trace_summary(
     """
     try:
         sb = get_supabase_admin()
+        _assert_conversation_owner(sb, conversation_id, user_id)
 
         result = (
             sb.table("thinking_trace")

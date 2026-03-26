@@ -15,6 +15,43 @@ export default function LoginPage() {
 
   const { signIn, signUp } = useAuth()
   const router = useRouter()
+  const apiBase = (process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:8000').replace(/\/$/, '')
+
+  const getAuthErrorMessage = (err, signUpMode) => {
+    const raw = err?.message || ''
+    const message = raw.toLowerCase()
+
+    if (signUpMode && message.includes('already registered')) {
+      return 'This email is already registered. Please switch to Sign In.'
+    }
+    if (message.includes('invalid email')) {
+      return 'Please enter a valid email address.'
+    }
+    if (message.includes('password')) {
+      return raw || 'Password does not meet the project auth policy.'
+    }
+    if (err?.status === 422) {
+      return 'Signup details were rejected. Check email/password and try again.'
+    }
+    return raw || 'Something went wrong'
+  }
+
+  const ensureBackendAcceptsSession = async (session) => {
+    const token = session?.access_token
+    if (!token) throw new Error('Missing access token after sign-in.')
+
+    const response = await fetch(`${apiBase}/conversations`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `Backend auth check failed (${response.status})`)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -22,19 +59,35 @@ export default function LoginPage() {
     setSuccess(null)
     setLoading(true)
 
+    const cleanEmail = email.trim().toLowerCase()
+    const cleanPassword = password.trim()
+
     try {
       if (isSignUp) {
-        const { error: signUpError } = await signUp(email, password)
+        const { error: signUpError, session: signUpSession, needsEmailConfirmation } = await signUp(cleanEmail, cleanPassword)
         if (signUpError) throw signUpError
-        setSuccess('Account created. Redirecting...')
-        setTimeout(() => router.push('/'), 500)
+        if (signUpSession) {
+          await ensureBackendAcceptsSession(signUpSession)
+          setSuccess('Account created. Redirecting...')
+          setTimeout(() => router.push('/'), 500)
+          return
+        }
+        if (needsEmailConfirmation) {
+          setSuccess('Account created. Check your email for a verification link, then sign in.')
+          setIsSignUp(false)
+          return
+        }
+        setSuccess('Account created. Please sign in.')
+        setIsSignUp(false)
       } else {
-        const { error: signInError } = await signIn(email, password)
+        const { error: signInError, session: signInSession } = await signIn(cleanEmail, cleanPassword)
         if (signInError) throw signInError
+        if (!signInSession) throw new Error('No active session. Please sign in again.')
+        await ensureBackendAcceptsSession(signInSession)
         router.push('/')
       }
     } catch (err) {
-      setError(err.message || 'Something went wrong')
+      setError(getAuthErrorMessage(err, isSignUp))
     } finally {
       setLoading(false)
     }

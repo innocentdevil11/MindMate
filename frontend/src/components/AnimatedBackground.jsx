@@ -67,13 +67,11 @@ class Particle {
 ======================= */
 export default function AnimatedBackground() {
   const pathname = usePathname();
-  
-  // Don't render on chat pages
-  if (pathname?.includes("/chat")) return null;
-  
   const canvasRef = useRef(null);
 
   useEffect(() => {
+    if (pathname?.includes("/chat")) return;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -190,7 +188,10 @@ export default function AnimatedBackground() {
       window.removeEventListener("touchmove", onTouch);
       cancelAnimationFrame(animationFrameId);
     };
-  }, []);
+  }, [pathname]);
+
+  // Don't render on chat pages
+  if (pathname?.includes("/chat")) return null;
 
   return (
     <canvas

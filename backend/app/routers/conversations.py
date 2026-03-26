@@ -7,7 +7,7 @@ DELETE /conversations/{id} — Delete a conversation
 """
 
 import logging
-from typing import List, Dict
+from typing import List
 
 from fastapi import APIRouter, HTTPException, Depends
 from auth import get_current_user
@@ -53,7 +53,15 @@ async def list_conversations(user_id: str = Depends(get_current_user)):
             .order("updated_at", desc=True)
             .execute()
         )
-        return result.data or []
+        rows = result.data or []
+        # Some legacy rows can have null titles; normalize to keep response-model validation stable.
+        return [
+            {
+                **row,
+                "title": (row.get("title") or "New Conversation"),
+            }
+            for row in rows
+        ]
     except Exception as e:
         logger.error(f"Failed to fetch conversations: {e}")
         raise HTTPException(status_code=500, detail="Database error")
@@ -84,6 +92,7 @@ async def get_conversation(conversation_id: str, user_id: str = Depends(get_curr
             sb.table("messages")
             .select("id, role, content, created_at")
             .eq("conversation_id", conversation_id)
+            .eq("user_id", user_id)
             .order("created_at", desc=False)
             .execute()
         )
@@ -105,19 +114,26 @@ async def delete_conversation(conversation_id: str, user_id: str = Depends(get_c
     """Delete a conversation and its nested messages (cascade via DB)."""
     sb = get_supabase_admin()
     try:
-        # DB RLS/Ownership check can be done via exact match
-        result = (
+        # Explicit ownership check before deleting nested resources.
+        conv = (
             sb.table("conversations")
-            .delete()
+            .select("user_id")
             .eq("id", conversation_id)
-            .eq("user_id", user_id)
+            .limit(1)
             .execute()
         )
-        
-        # also delete messages natively just to be safe if cascade isn't fully robust
-        sb.table("messages").delete().eq("conversation_id", conversation_id).execute()
-        
+        if not conv.data:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if conv.data[0]["user_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+        # Delete only this user's records for safety.
+        sb.table("messages").delete().eq("conversation_id", conversation_id).eq("user_id", user_id).execute()
+        sb.table("conversations").delete().eq("id", conversation_id).eq("user_id", user_id).execute()
+
         return {"status": "success"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to delete conversation: {e}")
         raise HTTPException(status_code=500, detail="Database error")

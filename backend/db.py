@@ -14,6 +14,7 @@ WHY two clients:
 import os
 import logging
 from pathlib import Path
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -21,11 +22,41 @@ logger = logging.getLogger(__name__)
 
 # Load .env from backend directory
 _backend_dir = Path(__file__).resolve().parent
-load_dotenv(dotenv_path=_backend_dir / ".env")
+load_dotenv(dotenv_path=_backend_dir / ".env", override=True)
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+def _getenv_stripped(name: str):
+    value = os.getenv(name)
+    return value.strip() if isinstance(value, str) else value
+
+
+SUPABASE_URL = _getenv_stripped("SUPABASE_URL")
+SUPABASE_ANON_KEY = _getenv_stripped("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY = _getenv_stripped("SUPABASE_SERVICE_ROLE_KEY")
+
+
+def _ensure_no_proxy_for_supabase() -> None:
+    """
+    Ensure Supabase traffic bypasses machine-level proxy settings.
+
+    Some local setups inject HTTP(S)_PROXY to localhost placeholders, which
+    can break Supabase auth calls and surface as false 401s.
+    """
+    if not SUPABASE_URL:
+        return
+
+    host = urlparse(SUPABASE_URL).hostname
+    if not host:
+        return
+
+    for key in ("NO_PROXY", "no_proxy"):
+        raw = os.getenv(key, "")
+        items = [entry.strip() for entry in raw.split(",") if entry.strip()]
+        if host not in items:
+            items.append(host)
+            os.environ[key] = ",".join(items)
+
+
+_ensure_no_proxy_for_supabase()
 
 # Singletons
 _client: Client | None = None

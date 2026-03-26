@@ -23,24 +23,78 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true) // true until initial check completes
 
+  const resolveValidSession = async () => {
+    const { data: { session: current } } = await supabase.auth.getSession()
+    if (!current) return null
+
+    const expiresSoon = current.expires_at
+      ? (current.expires_at * 1000) <= (Date.now() + 60_000)
+      : false
+
+    if (expiresSoon) {
+      const { data, error } = await supabase.auth.refreshSession()
+      if (!error && data?.session) {
+        return data.session
+      }
+    }
+
+    // Validate token against Supabase auth; if invalid, try one refresh.
+    const { error: validateError } = await supabase.auth.getUser(current.access_token)
+    if (!validateError) return current
+
+    const { data, error } = await supabase.auth.refreshSession()
+    if (error) return null
+    return data?.session || null
+  }
+
   useEffect(() => {
-    // 1. Check existing session on mount
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s)
-      setUser(s?.user || null)
+    let active = true
+
+    const syncSession = async () => {
+      const valid = await resolveValidSession()
+      if (!active) return
+      setSession(valid)
+      setUser(valid?.user || null)
       setLoading(false)
-    })
+    }
+
+    // 1. Check existing session on mount
+    syncSession()
 
     // 2. Listen for auth state changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, s) => {
-        setSession(s)
-        setUser(s?.user || null)
+      async (event, s) => {
+        if (!active) return
+
+        if (s) {
+          const valid = await resolveValidSession()
+          if (!active) return
+          setSession(valid)
+          setUser(valid?.user || null)
+          setLoading(false)
+          return
+        }
+
+        if (event === 'SIGNED_OUT') {
+          setSession(null)
+          setUser(null)
+          setLoading(false)
+          return
+        }
+
+        // Avoid false-negative auth flips on transient events.
+        const latest = await resolveValidSession()
+        if (!active) return
+        setSession(latest || null)
+        setUser(latest?.user || null)
         setLoading(false)
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   /**
@@ -49,7 +103,21 @@ export function AuthProvider({ children }) {
    */
   const signIn = async (email, password) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    return { error }
+    if (error) {
+      return { error, session: null }
+    }
+
+    const currentSession = await resolveValidSession()
+    if (!currentSession) {
+      return {
+        error: new Error('No active session. If you just signed up, verify your email first.'),
+        session: null,
+      }
+    }
+
+    setSession(currentSession)
+    setUser(currentSession.user || null)
+    return { error: null, session: currentSession }
   }
 
   /**
@@ -57,8 +125,19 @@ export function AuthProvider({ children }) {
    * @returns {{ error: Error | null }}
    */
   const signUp = async (email, password) => {
-    const { error } = await supabase.auth.signUp({ email, password })
-    return { error }
+    const { data, error } = await supabase.auth.signUp({ email, password })
+    if (error) {
+      return { error, session: null, needsEmailConfirmation: false }
+    }
+
+    const currentSession = data?.session ? await resolveValidSession() : null
+    if (currentSession) {
+      setSession(currentSession)
+      setUser(currentSession.user || null)
+      return { error: null, session: currentSession, needsEmailConfirmation: false }
+    }
+
+    return { error: null, session: null, needsEmailConfirmation: true }
   }
 
   /**

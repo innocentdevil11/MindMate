@@ -33,6 +33,9 @@ from services import preferences as pref_service
 from services import memory as memory_service
 from services import contradiction as contradiction_service
 from services import feedback as feedback_service
+from app.routers import conversations as conversations_router
+from app.routers import chat as chat_router
+from app.routers import trace as trace_router
 
 # Global graph instance
 graph = None
@@ -43,6 +46,12 @@ async def lifespan(app: FastAPI):
     """Initialize graph at startup"""
     global graph
     graph = build_mindmate_graph()
+    # Also initialize and expose v3 /chat when running legacy api:app.
+    try:
+        chat_router.init_graph()
+        logger.info("v3 chat graph initialized in legacy API")
+    except Exception as e:
+        logger.warning(f"Failed to initialize v3 chat graph in legacy API: {e}")
     yield
     # Cleanup if needed
     graph = None
@@ -56,16 +65,26 @@ app = FastAPI(
 )
 
 # CORS configuration — supports production origins via env var
-cors_origins_str = os.getenv("BACKEND_CORS_ORIGINS", "http://localhost:3000")
-cors_origins = [origin.strip() for origin in cors_origins_str.split(",")]
+cors_origins_str = os.getenv("BACKEND_CORS_ORIGINS", "http://localhost:8001")
+cors_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+cors_origin_regex = os.getenv(
+    "BACKEND_CORS_ORIGIN_REGEX",
+    r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+).strip() or None
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_origin_regex=cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Keep /conversations available even when deployments use the legacy api:app entrypoint.
+app.include_router(conversations_router.router)
+app.include_router(chat_router.router)
+app.include_router(trace_router.router)
 
 
 # ==================== PYDANTIC MODELS ====================
@@ -136,7 +155,8 @@ async def root():
         "version": "2.0.0",
         "endpoints": [
             "/decision", "/health", "/preferences",
-            "/memory", "/feedback",
+            "/memory", "/feedback", "/conversations",
+            "/chat", "/trace/{conversation_id}",
         ],
     }
 

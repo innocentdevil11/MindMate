@@ -115,15 +115,15 @@ MindMate/
    npm run dev
    ```
    
-   Frontend will start at: `http://localhost:3000`
+   Frontend will start at: `http://localhost:8001`
 
 ---
 
 ## 🎮 Usage
 
-1. **Start both servers** (backend on :8000, frontend on :3000)
+1. **Start both servers** (backend on :8000, frontend on :8001)
 
-2. **Open** `http://localhost:3000` in your browser
+2. **Open** `http://localhost:8001` in your browser
 
 3. **Enter your decision query** in the large text area
    - Example: "Should I leave my current job to start a startup?"
@@ -246,7 +246,7 @@ uvicorn.run(app, host="0.0.0.0", port=8001)
 
 **CORS errors**:
 - Check that frontend URL is in `allow_origins` (api.py, line 33)
-- Default: `http://localhost:3000`
+- Default: `http://localhost:8001`
 
 **Graph initialization fails**:
 - Ensure all agent dependencies are installed

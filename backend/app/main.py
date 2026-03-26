@@ -46,12 +46,18 @@ app = FastAPI(
 )
 
 # CORS
-cors_origins_str = os.getenv("BACKEND_CORS_ORIGINS", "http://localhost:3000")
-cors_origins = [origin.strip() for origin in cors_origins_str.split(",")]
+# Supports explicit origins plus optional regex for dynamic preview domains.
+cors_origins_str = os.getenv("BACKEND_CORS_ORIGINS", "http://localhost:8001")
+cors_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+cors_origin_regex = os.getenv(
+    "BACKEND_CORS_ORIGIN_REGEX",
+    r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+).strip() or None
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_origin_regex=cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

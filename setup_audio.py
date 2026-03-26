@@ -174,7 +174,7 @@ def run_all_checks():
         print("\nNext steps:")
         print("1. Terminal 1: cd backend && python -m uvicorn api:app --reload")
         print("2. Terminal 2: cd frontend && npm run dev")
-        print("3. Open http://localhost:3000 in your browser")
+        print("3. Open http://localhost:8001 in your browser")
     else:
         print("\n✗ Some checks failed. Please fix the issues above and try again.")
         return False

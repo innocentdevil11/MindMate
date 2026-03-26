@@ -7,6 +7,8 @@ Handles the full pipeline: auth → memory → brain config → LangGraph → st
 
 import uuid
 import logging
+import asyncio
+import concurrent.futures
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -141,7 +143,7 @@ async def chat(
         memory_parts = [v for v in memory.values() if v]
         combined_memory = "\n\n".join(memory_parts)
 
-        # Step 5: Execute LangGraph
+        # Step 5: Execute LangGraph with timeout guard
         initial_state = {
             "user_query": request.query,
             "conversation_id": conversation_id,
@@ -164,12 +166,36 @@ async def chat(
             "trace_steps": [],
         }
 
-        result = graph.invoke(initial_state)
+        # Run graph with 15s timeout to prevent hanging
+        try:
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(pool, graph.invoke, initial_state),
+                    timeout=15.0,
+                )
+        except asyncio.TimeoutError:
+            logger.warning("Graph execution timed out after 15s — using fallback")
+            fallback = call_groq(
+                system_prompt="You are MindMate, a thoughtful AI companion. Respond naturally and briefly.",
+                user_message=request.query,
+                temperature=0.7,
+                max_tokens=100,
+            )
+            result = {
+                "final_response": fallback or "Hey — I'm here. What's on your mind?",
+                "intent": "smalltalk",
+                "complexity": "simple",
+                "trace_steps": [],
+            }
 
-        # (Title generation moved down to happen after the AI response is ready)
+        # Empty-response fallback — guarantee we ALWAYS return something
+        final_response = (result.get("final_response") or "").strip()
+        if not final_response:
+            logger.warning("Empty response from pipeline — using fallback")
+            final_response = "Hey — I'm here. What's on your mind?"
 
         # Step 6: Store AI response
-        final_response = result.get("final_response", "I'm not sure how to respond to that.")
         await store_message(conversation_id, user_id, "assistant", final_response)
         await touch_conversation(
             conversation_id,
@@ -204,9 +230,19 @@ async def chat(
         raise
     except Exception as e:
         logger.error(f"Chat pipeline error: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing message: {str(e)[:200]}"
+        # Return a valid response instead of crashing
+        fallback_msg = "I'm having trouble processing that right now. Could you try again?"
+        try:
+            await store_message(conversation_id, user_id, "assistant", fallback_msg)
+        except Exception:
+            pass
+        return ChatResponse(
+            response=fallback_msg,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            intent=Intent.SMALLTALK,
+            complexity=Complexity.SIMPLE,
+            thinking_trace_id=message_id,
         )
 
 

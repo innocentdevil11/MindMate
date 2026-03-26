@@ -473,14 +473,29 @@ export default function Home() {
       <div className="relative w-full max-w-[1200px] h-screen px-3 sm:px-6 py-3 sm:py-5 flex gap-4">
         <AnimatePresence>
           {showSidebar && (
+            <motion.button
+              type="button"
+              className="fixed inset-0 z-20 bg-black/20 backdrop-blur-[1px]"
+              onClick={() => setShowSidebar(false)}
+              aria-label="Close conversations overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showSidebar && (
             <motion.aside
-              initial={{ opacity: 0, x: -12 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -16 }}
-              transition={{ duration: 0.22 }}
-              className="absolute md:static left-3 top-3 md:top-auto md:left-auto z-30 w-72 flex-none"
+              initial={{ x: -280 }}
+              animate={{ x: 0 }}
+              exit={{ x: -280 }}
+              transition={{ duration: 0.25, ease: 'easeInOut' }}
+              className="fixed top-0 left-0 h-screen z-30 w-72"
             >
-              <div className="h-full w-full rounded-[1.75rem] border border-white/70 bg-white/90 backdrop-blur-sm shadow-[0_14px_40px_rgba(15,23,42,0.08)] flex flex-col overflow-hidden">
+              <div className="h-full w-full border-r border-white/70 bg-white/95 backdrop-blur-sm shadow-[0_14px_40px_rgba(15,23,42,0.08)] flex flex-col overflow-hidden">
                 <div className="px-4 py-4 border-b border-slate-200/70 flex items-center justify-between">
                   <button
                     type="button"
@@ -512,7 +527,16 @@ export default function Home() {
                   {conversationsLoading ? (
                     <div className="px-4 py-4 text-slate-400 text-sm">Loading...</div>
                   ) : conversationError ? (
-                    <div className="px-4 py-4 text-red-500 text-sm">{conversationError}</div>
+                    <div className="px-4 py-4">
+                      <p className="text-red-500 text-sm">{conversationError}</p>
+                      <button
+                        type="button"
+                        onClick={refreshConversations}
+                        className="mt-2 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs hover:bg-slate-200"
+                      >
+                        Retry
+                      </button>
+                    </div>
                   ) : conversations.length === 0 ? (
                     <div className="px-4 py-6 text-slate-400 text-sm">No conversations yet.</div>
                   ) : (
@@ -594,14 +618,7 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {showSidebar && (
-          <button
-            type="button"
-            className="fixed inset-0 bg-black/10 backdrop-blur-[1px] md:hidden"
-            onClick={() => setShowSidebar(false)}
-            aria-label="Close conversations overlay"
-          />
-        )}
+
 
         <div className="flex-1 h-full rounded-[2rem] sm:rounded-[2.3rem] border border-white/70 bg-white/70 backdrop-blur-sm shadow-[0_18px_50px_rgba(15,23,42,0.08)] flex flex-col overflow-hidden">
           <header className="flex-none px-4 sm:px-6 pt-4 sm:pt-5 pb-3 flex items-center justify-between border-b border-slate-200/60">

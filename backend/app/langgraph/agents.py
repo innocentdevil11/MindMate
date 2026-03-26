@@ -13,6 +13,7 @@ Key changes from v2:
 
 import json
 import logging
+import concurrent.futures
 from typing import Dict, Any, Optional
 
 from agents.groq_client import call_groq
@@ -188,7 +189,7 @@ def run_all_active_agents(
     intent: str = "",
 ) -> list[AgentOutput]:
     """
-    Run all agents with weight > 0.
+    Run all agents with weight > 0 in parallel.
 
     Args:
         query: User query
@@ -198,14 +199,24 @@ def run_all_active_agents(
     Returns:
         List of AgentOutput from active agents
     """
-    outputs = []
-    for agent_key, weight in weights.items():
-        if weight <= 0:
-            logger.debug(f"Skipping agent '{agent_key}' (weight={weight})")
-            continue
+    active_agents = [(k, w) for k, w in weights.items() if w > 0]
 
-        result = run_agent(agent_key, query, memory_context, intent)
-        if result:
-            outputs.append(result)
+    if not active_agents:
+        return []
+
+    outputs = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(active_agents)) as executor:
+        futures = {
+            executor.submit(run_agent, agent_key, query, memory_context, intent): agent_key
+            for agent_key, _ in active_agents
+        }
+        for future in concurrent.futures.as_completed(futures):
+            agent_key = futures[future]
+            try:
+                result = future.result(timeout=10)
+                if result:
+                    outputs.append(result)
+            except Exception as e:
+                logger.error(f"Agent '{agent_key}' parallel execution failed: {e}")
 
     return outputs

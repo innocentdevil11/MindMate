@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { motion } from 'framer-motion'
+import { API_URL } from '@/lib/api'
 
 export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false)
@@ -12,10 +13,11 @@ export default function LoginPage() {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(null)
+  const [statusMessage, setStatusMessage] = useState(null)
 
   const { signIn, signUp } = useAuth()
   const router = useRouter()
-  const apiBase = (process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:8000').replace(/\/$/, '')
+  const apiBase = API_URL
 
   const getAuthErrorMessage = (err, signUpMode) => {
     const raw = err?.message || ''
@@ -40,16 +42,26 @@ export default function LoginPage() {
     const token = session?.access_token
     if (!token) throw new Error('Missing access token after sign-in.')
 
-    const response = await fetch(`${apiBase}/conversations`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    })
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      setStatusMessage('Waking up the server (this can take up to 50s)...')
+    }, 3000)
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.detail || `Backend auth check failed (${response.status})`)
+    try {
+      const response = await fetch(`${apiBase}/conversations`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        signal: controller.signal
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || `Backend auth check failed (${response.status})`)
+      }
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
 
@@ -57,6 +69,7 @@ export default function LoginPage() {
     e.preventDefault()
     setError(null)
     setSuccess(null)
+    setStatusMessage(null)
     setLoading(true)
 
     const cleanEmail = email.trim().toLowerCase()
@@ -82,7 +95,11 @@ export default function LoginPage() {
       } else {
         const { error: signInError, session: signInSession } = await signIn(cleanEmail, cleanPassword)
         if (signInError) throw signInError
-        if (!signInSession) throw new Error('No active session. Please sign in again.')
+        if (!signInSession) {
+          throw new Error('No active session. Please sign in again.')
+        }
+        
+        // Wait for Render cold start logic
         await ensureBackendAcceptsSession(signInSession)
         router.push('/')
       }
@@ -90,6 +107,7 @@ export default function LoginPage() {
       setError(getAuthErrorMessage(err, isSignUp))
     } finally {
       setLoading(false)
+      setStatusMessage(null)
     }
   }
 
@@ -176,7 +194,7 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full py-3 bg-slate-700 rounded-xl font-semibold text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors hover:bg-slate-800"
             >
-              {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
+              {loading ? (statusMessage || 'Please wait...') : (isSignUp ? 'Create Account' : 'Sign In')}
             </button>
           </form>
         </div>
@@ -186,3 +204,4 @@ export default function LoginPage() {
     </div>
   )
 }
+

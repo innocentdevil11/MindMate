@@ -1,62 +1,83 @@
-🧠 MindMate
+# 🧠 MindMate
 
-A futuristic multi-agent AI decision system powered by LangGraph, FastAPI, and Next.js.
+A futuristic, multi-agent cognitive architecture powered by **LangGraph**, **FastAPI**, **Next.js**, and **Supabase**.
 
 **"A private board of AI directors helping you think clearly."**
 
+---
+
 ## 🎯 Overview
 
-MindMate provides AI-powered decision making through five specialized minds:
+MindMate is not a standard chatbot wrapper. It is a simulated "Council of Minds." When presented with complex dilemmas, it runs multiple specialized cognitive agents simultaneously, identifies disagreements, facilitates a debate, and synthesizes a single, highly nuanced resolution.
 
-- **Ethical Agent**: Moral & philosophical perspective
-- **Risk & Logic Agent**: Analytical risk assessment  
-- **EQ Agent**: Emotional intelligence lens
-- **Value Alignment Agent**: Personal values harmony
-- **Red Team Agent**: Devil's advocate perspective
-
-All perspectives are synthesized by an **Aggregator Agent** into a final council resolution.
+The council consists of five specialized minds:
+- **Ethical Agent**: Focuses on moral duty and principles of right action.
+- **Analytical Agent (Risk & Logic)**: Focuses on logic, practical outcomes, and risk assessment.
+- **Emotional Agent (EQ)**: Focuses on emotional attunement, relationships, and empathy.
+- **Values Agent**: Focuses on identity, legacy, and long-term personal alignment.
+- **Red Team Agent**: Plays devil's advocate, fiercely challenging assumptions.
 
 ---
 
 ## 🏗️ Architecture
 
-```
-┌─────────────┐         ┌──────────────┐         ┌─────────────────┐
-│   Next.js   │ ──────► │   FastAPI    │ ──────► │   LangGraph     │
-│   Frontend  │  HTTP   │   Backend    │ invoke  │  Multi-Agent    │
-│             │ ◄────── │              │ ◄────── │   System        │
-└─────────────┘         └──────────────┘         └─────────────────┘
+```mermaid
+graph LR
+    A[Next.js Frontend] -->|HTTP / JWT| B(FastAPI Backend)
+    B <-->|PostgreSQL| C[(Supabase Auth & DB)]
+    B -->|Invokes| D{LangGraph Cognitive Pipeline}
+    D --> E[Intent/Complexity Fast Path]
+    D --> F[Parallel Multi-Agent Engine]
+    F --> G{Debate Engine}
+    G --> H[Conflict Resolution & Synthesis]
+    H --> I[Personality & Tone Engine]
+    I --> B
 ```
 
-- **Frontend**: Next.js 14 (App Router), React, Tailwind CSS, Framer Motion
-- **Backend**: FastAPI with Pydantic validation and CORS
-- **Agents**: LangGraph orchestrating 5 agents + aggregator (unchanged)
+### Tech Stack
+- **Frontend**: Next.js 14 (App Router), React, Tailwind CSS, Framer Motion.
+- **Backend**: FastAPI, Pydantic, Groq API (ultra-fast Llama inference).
+- **Core Intelligence**: LangGraph orchestrating concurrent agents, debate thresholds, and state management.
+- **Database & Auth**: Supabase (PostgreSQL) for JWT auth, session management, and persistent conversation memory.
+
+---
+
+## 🧠 How The Cognitive Pipeline Works
+
+The intelligence of MindMate is defined by a deeply structured `StateGraph` in the backend:
+
+1. **Classification & Fast Path**: Queries are instantly classified by intent and complexity. Simple greetings ("hi") or casual chat take a "Fast Path", bypassing the heavy agent machinery to return responses in under a second.
+2. **Parallel Agent Reasoning**: For medium/complex queries, the selected agents (weighted by the user) scale up automatically using concurrent threads, analyzing the problem from their unique vantage points simultaneously.
+3. **Adaptive Debate Phase**: The system calculates a *Disagreement Score* across the agent outputs. If the score exceeds the configurable threshold (`0.15`), a dynamic debate round is triggered where a moderator LLM identifies logical gaps and pushes the agents to reconcile.
+4. **Resolution & Personality**: A conflict resolution node synthesizes the final answer according to the user's defined "Brain Weights" (sliders). Finally, a dual-layer Personality Engine applies the user's chosen Tone Mode (*Clean, Casual, Blunt, or Unfiltered*).
 
 ---
 
 ## 📁 Project Structure
 
-```
+```text
 MindMate/
 ├── backend/
-│   ├── agents/              # Agent implementations (DO NOT MODIFY)
-│   ├── graph/               # LangGraph flow (DO NOT MODIFY)
-│   ├── api.py              # FastAPI integration layer
-│   ├── main.py             # Original CLI runner
-│   └── requirements.txt    # Python dependencies
+│   ├── app/
+│   │   ├── api.py                  # FastAPI Application Factory
+│   │   ├── routers/                # API Endpoints (chat, auth, trace)
+│   │   ├── models/                 # Pydantic Schemas (ChatResponse, BrainConfig)
+│   │   ├── services/               # Personality, Memory (Supabase), Conflict Resolution
+│   │   └── langgraph/              # The Cognitive Pipeline
+│   │       ├── workflow.py         # Main StateGraph definition
+│   │       ├── agents.py           # Parallel agent execution engine
+│   │       └── orchestrator.py     # Fast-path and routing logic
+│   ├── requirements.txt            
+│   └── .env                        # Groq & Supabase credentials
 │
 └── frontend/
-    ├── app/
-    │   ├── page.jsx        # Main application page
-    │   ├── layout.jsx      # Root layout
-    │   └── globals.css     # Global styles
-    ├── components/
-    │   ├── WeightSlider.jsx    # Agent weight control
-    │   ├── AgentCard.jsx       # Agent output display
-    │   └── LoadingSpinner.jsx  # Loading animation
+    ├── src/
+    │   ├── app/                    # Next.js App Router pages (login, chat)
+    │   ├── components/             # React UI (Sidebar, ChatBubble, BrainSliders)
+    │   ├── context/                # AuthContext (Supabase Session Management)
+    │   └── lib/                    # API clients (api.js, supabase.js)
     ├── package.json
-    ├── tailwind.config.js
-    └── next.config.js
+    └── tailwind.config.js
 ```
 
 ---
@@ -64,250 +85,99 @@ MindMate/
 ## 🚀 Setup Instructions
 
 ### Prerequisites
+- **Python 3.10+**
+- **Node.js 18+**
+- **Supabase Project**: (URL and Anon/Service Keys required)
+- **Groq API Key**: (For fast LLM inference)
 
-- **Python 3.9+** with pip
-- **Node.js 18+** with npm
-- Environment variables for LLM API keys (if used by agents)
+### 1. Backend Setup
 
-### Backend Setup
-
-1. **Navigate to backend directory**:
+1. Navigate to the backend directory:
    ```bash
    cd backend
    ```
-
-2. **Create virtual environment** (recommended):
+2. Create and activate a virtual environment:
    ```bash
    python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   source venv/bin/activate  # Windows: venv\Scripts\activate
    ```
-
-3. **Install dependencies**:
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-   
-   Note: You may need to install additional dependencies for LangGraph and the agents. Check the agent files for specific requirements.
-
-4. **Run the FastAPI server**:
-   ```bash
-   python api.py
+4. Configure Environment Variables (`backend/.env`):
+   ```env
+   GROQ_API_KEY=your_groq_key
+   SUPABASE_URL=your_supabase_url
+   SUPABASE_ANON_KEY=your_supabase_anon_key
+   SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_key
    ```
-   
-   Server will start at: `http://localhost:8000`
-   
-   API docs available at: `http://localhost:8000/docs`
+5. Run the FastAPI development server:
+   ```bash
+   python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
 
-### Frontend Setup
+### 2. Frontend Setup
 
-1. **Navigate to frontend directory**:
+1. Navigate to the frontend directory:
    ```bash
    cd frontend
    ```
-
-2. **Install dependencies**:
+2. Install dependencies:
    ```bash
    npm install
    ```
-
-3. **Run the development server**:
+3. Configure Environment Variables (`frontend/.env.local`):
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   NEXT_PUBLIC_API_URL=http://localhost:8000
+   ```
+4. Run the development server:
    ```bash
    npm run dev
    ```
-   
-   Frontend will start at: `http://localhost:8001`
 
 ---
 
 ## 🎮 Usage
 
-1. **Start both servers** (backend on :8000, frontend on :8001)
-
-2. **Open** `http://localhost:8001` in your browser
-
-3. **Enter your decision query** in the large text area
-   - Example: "Should I leave my current job to start a startup?"
-
-4. **Adjust agent weights** using the sliders (0.0 to 1.0)
-   - Default: All agents weighted equally at 0.2
-
-5. **Click "Run MindMate"** to execute
-
-6. **View results**:
-   - **Council Resolution**: Final aggregated decision (prominent panel)
-   - **Individual Perspectives**: Each agent's analysis (cards below)
+1. **Sign In**: Create an account or log in via the Supabase-powered authentication screen.
+2. **Workspace**: Enter your query into the chat input. 
+3. **Brain Weights**: Click the sliders icon to adjust the relative influence of the Ethical, Analytical, Emotional, Values, and Red Team agents.
+4. **Tone Control**: Select your preferred output style (*Clean, Casual, Blunt, Unfiltered*).
+5. **Thinking Trace**: After the AI responds, click on the "MindMate thought for X seconds" indicator to view the internal LangGraph trace, showing you exactly how the agents debated and arrived at their conclusion.
 
 ---
 
 ## 🎨 Design Features
 
-### Visual Style
-- **Dark mode only** with neon accents (cyan, violet, emerald)
-- **Glassmorphism** effects on all panels
-- **Animated gradient background**
-- **Neon glows** on interactive elements
+### Visual Excellence
+- **Calm Thinking Workspace**: Minimalist, distraction-free aesthetic.
+- **Dynamic Blob Visualizer**: An animated, color-shifting SVG blob that subtly reflects the active AI tone and thinking state.
+- **Premium Animations**: Framer Motion handles staggered lists, smooth chat bubble entries, and highly polished collapsible sidebars.
 
-### Animations (Framer Motion)
-- Staggered card entrance animations
-- Smooth loading spinner with pulsing effects
-- Hover interactions on buttons and sliders
-- Scale animations on value changes
-
-### Responsive Design
-- Mobile-first approach
-- Grid layouts adapt to screen size
-- Touch-friendly controls
-
----
-
-## 🔌 API Reference
-
-### `POST /decision`
-
-Execute the MindMate decision process.
-
-**Request Body**:
-```json
-{
-  "query": "Your decision question here",
-  "weights": {
-    "ethical": 0.2,
-    "risk": 0.2,
-    "eq": 0.2,
-    "values": 0.2,
-    "red_team": 0.2
-  }
-}
-```
-
-**Response**:
-```json
-{
-  "agent_outputs": {
-    "ethical": "Ethical agent's perspective...",
-    "risk": "Risk agent's analysis...",
-    "eq": "EQ agent's insights...",
-    "values": "Values agent's view...",
-    "red_team": "Red team's critique..."
-  },
-  "final_decision": "Aggregated council resolution..."
-}
-```
-
-**Other Endpoints**:
-- `GET /` - API info
-- `GET /health` - Health check
-
----
-
-## 🛠️ Development
-
-### Backend Development
-
-The backend is a **thin integration layer**. The agent logic and LangGraph flow are in separate files and should not be modified.
-
-To add features:
-- Modify `api.py` only
-- Keep graph execution as a black box
-- Add validation or middleware as needed
-
-### Frontend Development
-
-```bash
-cd frontend
-npm run dev      # Development server
-npm run build    # Production build
-npm run start    # Production server
-npm run lint     # ESLint
-```
-
-**Key Components**:
-- `page.jsx` - Main app logic and layout
-- `WeightSlider.jsx` - Reusable slider with animations
-- `AgentCard.jsx` - Agent output card with staggered animations
-- `LoadingSpinner.jsx` - Animated loading state
-
-**Styling**:
-- Tailwind utility classes
-- Custom utilities in `globals.css`
-- Framer Motion for animations
-
----
-
-## 🐛 Troubleshooting
-
-### Backend Issues
-
-**Port already in use**:
-```bash
-# Change port in api.py, line 140:
-uvicorn.run(app, host="0.0.0.0", port=8001)
-```
-
-**CORS errors**:
-- Check that frontend URL is in `allow_origins` (api.py, line 33)
-- Default: `http://localhost:8001`
-
-**Graph initialization fails**:
-- Ensure all agent dependencies are installed
-- Check LLM API keys are set in environment
-
-### Frontend Issues
-
-**Module not found errors**:
-```bash
-rm -rf node_modules package-lock.json
-npm install
-```
-
-**API connection fails**:
-- Verify backend is running on port 8000
-- Check `API_URL` in `app/page.jsx` (line 9)
-
-**Build errors**:
-- Ensure Node.js version is 18 or higher
-- Clear Next.js cache: `rm -rf .next`
+### Resiliency
+- **Fail-Soft Architecture**: Fallback mechanisms ensure that even if the cognitive graph times out, a safe contextual response is still delivered.
+- **Concurrent Executions**: Utilizing `ThreadPoolExecutor` ensures parallel agent generation, drastically cutting down complex query latency.
 
 ---
 
 ## 📦 Production Deployment
 
-### Backend
+MindMate is designed to be deployed seamlessly to standard cloud providers.
 
-1. Set environment variables for production
-2. Use a production ASGI server (uvicorn with workers)
-3. Configure proper CORS origins
-4. Add authentication if needed
+**Backend (Render / Railway)**:
+- Ensure all Supabase and Groq environment variables are configured.
+- Start the app using a robust ASGI server:
+  ```bash
+  uvicorn app.main:app --host 0.0.0.0 --port 10000
+  ```
 
-```bash
-uvicorn api:app --host 0.0.0.0 --port 8000 --workers 4
-```
-
-### Frontend
-
-```bash
-npm run build
-npm run start
-```
-
-Or deploy to Vercel/Netlify (configure API_URL as environment variable).
+**Frontend (Vercel / Netlify)**:
+- Set `NEXT_PUBLIC_API_URL` to your production backend's URL.
+- Deploy directly from the `frontend` folder using standard Next.js build settings. The `lib/api.js` client acts as a safety layer natively handling JWT token refreshes and edge-case Render sleep delays.
 
 ---
 
-## 📄 License
-
-This project integrates existing LangGraph agents with a new FastAPI backend and Next.js frontend.
-
----
-
-## 🙏 Credits
-
-- **LangGraph** for multi-agent orchestration
-- **FastAPI** for the backend API layer
-- **Next.js** for the React framework
-- **Framer Motion** for animations
-- **Tailwind CSS** for styling
-
----
-
-**Built with ⚡ for clarity in decision-making**
+**Built with ⚡ for unparalleled clarity in decision-making.**
